@@ -1,0 +1,16 @@
+TFU2 Import for 3ds Max 2016-2027
+
+DISCLAIMER
+Unofficial, free fan project. It is NOT made by, affiliated with, endorsed
+or sponsored by Lucasfilm Ltd., LucasArts, The Walt Disney Company, Aspyr
+or Autodesk. Star Wars and The Force Unleashed are trademarks of Lucasfilm
+Ltd. / The Walt Disney Company; 3ds Max is a trademark of Autodesk. No game
+data is included - the plugin reads the files of your own game installation.
+
+Requirements
+- Windows 10/11 64-bit, 3ds Max 2016-2027
+- Star Wars: The Force Unleashed II (PC) installed
+- Close 3ds Max before installing
+
+License: GPL-3.0 (see LICENSE on GitHub)
+https://github.com/DennisHerrm/TFU2-Import-3dsMax

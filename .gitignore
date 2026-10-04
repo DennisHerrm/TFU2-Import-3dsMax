@@ -4,3 +4,6 @@ output/
 chars.txt
 package/TFU2Import/Contents/
 *.out
+dist/
+installer/redist/
+ENTWICKLUNG.md
