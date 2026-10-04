@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -363,7 +364,7 @@ Skelett BaueSkelett(Interface* ip, const tfu::Modell& m, const tfu::FigurEintrag
 std::string NeueId() {
     static unsigned zaehler = 0;
     char b[48];
-    std::snprintf(b, sizeof b, "%llx-%u", static_cast<unsigned long long>(GetTickCount64()), ++zaehler);
+    std::snprintf(b, sizeof b, "%llx-%u", static_cast<unsigned long long>(std::chrono::system_clock::now().time_since_epoch().count()), ++zaehler);
     return b;
 }
 

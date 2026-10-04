@@ -9,11 +9,11 @@ You need your own copy of the game.*
 
 ## Status
 
-Version 0.1.0 – built and tested for **3ds Max 2026**.
+Version 0.1.0 – builds for **3ds Max 2016 to 2027**.
 
 ## Install
 
-1. Run `BUILD.bat` (needs Visual Studio with C++ and the 3ds Max 2026 SDK), or copy a
+1. Run `BUILD.bat` (needs Visual Studio with C++ and the 3ds Max SDK of each version you want), or copy a
    built package to `%APPDATA%\Autodesk\ApplicationPlugins\TFU2Import`.
 2. Restart 3ds Max.
 

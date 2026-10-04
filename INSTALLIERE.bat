@@ -19,6 +19,7 @@ if exist "%DEST%\Contents" for /R "%DEST%\Contents" %%f in (TFU2Import.dl*) do (
 if exist "%DEST%\Contents" rmdir /s /q "%DEST%\Contents"
 mkdir "%DEST%\Contents\MacroScripts" >nul 2>&1
 mkdir "%DEST%\Contents\Pre-Start-Up_Scripts" >nul 2>&1
+mkdir "%DEST%\Contents\Post-Start-Up_Scripts" >nul 2>&1
 set ZAHL=0
 for /D %%V in ("%OUTPUT%\*") do (
   if exist "%%V\TFU2Import.dlu" (
@@ -30,6 +31,7 @@ for /D %%V in ("%OUTPUT%\*") do (
 copy /Y "%~dp0package\TFU2Import\PackageContents.xml" "%DEST%\" >nul
 copy /Y "%~dp0scripts\TFU2Import.mcr" "%DEST%\Contents\MacroScripts\" >nul
 copy /Y "%~dp0scripts\TFU2Menu_2025_2027.ms" "%DEST%\Contents\Pre-Start-Up_Scripts\" >nul
+copy /Y "%~dp0scripts\TFU2Menu_2016_2024.ms" "%DEST%\Contents\Post-Start-Up_Scripts\" >nul
 echo       %ZAHL% Max-Fassung(en) installiert nach:
 echo       %DEST%
 echo.

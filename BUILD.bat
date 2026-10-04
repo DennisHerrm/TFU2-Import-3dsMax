@@ -1,7 +1,7 @@
 @echo off
 REM ================================================================
 REM  BUILD.bat - TFU2 Import bauen und installieren.
-REM    BUILD.bat          alle Jahrgaenge aus JAHRGAENGE (vorerst 2026)
+REM    BUILD.bat          alle Jahrgaenge 2016-2027 mit installiertem SDK
 REM    BUILD.bat 2026     nur diesen
 REM  Protokoll: BUILD.log
 REM ================================================================
@@ -10,7 +10,7 @@ cd /d "%~dp0"
 set "LOG=%~dp0BUILD.log"
 set "OUTPUT=%~dp0output"
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-set "JAHRGAENGE=2026"
+set "JAHRGAENGE=2016 2017 2018 2019 2020 2021 2022 2023 2024 2025 2026 2027"
 set "CMAKE="
 set "GEN=Visual Studio 17 2022"
 set "GEBAUT=0"
