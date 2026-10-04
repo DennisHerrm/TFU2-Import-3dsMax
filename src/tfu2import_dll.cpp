@@ -1,0 +1,152 @@
+// ============================================================
+//  TFU2 Import - DLL-Einstieg, Importer-Klasse und MAXScript
+//
+//  Die Exporte sind nicht extern "C"; die .def-Datei sorgt dafuer,
+//  dass Max die undekorierten Namen findet (wie beim SWBF2 Import).
+// ============================================================
+#include "tfu2import.h"
+
+#include <iFnPub.h>
+
+HINSTANCE hInstance = nullptr;
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, ULONG fdwReason, LPVOID) {
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+        hInstance = hinstDLL;
+        DisableThreadLibraryCalls(hinstDLL);
+    }
+    return TRUE;
+}
+
+class TFU2SceneImport : public SceneImport {
+public:
+    int ExtCount() override { return 3; }
+    const MCHAR* Ext(int i) override {
+        switch (i) {
+        case 0: return _T("lp");
+        case 1: return _T("gto");
+        case 2: return _T("exe");
+        default: return _T("");
+        }
+    }
+    const MCHAR* ShortDesc() override { return _T("Star Wars: The Force Unleashed II"); }
+    const MCHAR* LongDesc() override {
+        return _T("TFU2: game (pak0.lp / SWTFU2.exe -> character window) or a loose .gto model");
+    }
+    const MCHAR* AuthorName() override { return _T("DennisH"); }
+    const MCHAR* CopyrightMessage() override { return _T(""); }
+    const MCHAR* OtherMessage1() override { return _T(""); }
+    const MCHAR* OtherMessage2() override { return _T(""); }
+    unsigned int Version() override { return TFU2IMPORT_VERSION; }
+    void ShowAbout(HWND hWnd) override {
+        MessageBox(hWnd, _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T("\n\nCharacters and animations straight from\n")
+                         _T("Star Wars: The Force Unleashed II.\n\nNot affiliated with Lucasfilm, LucasArts, Disney or Autodesk."),
+                   _T("TFU2 Import"), MB_ICONINFORMATION);
+    }
+    int DoImport(const MCHAR* name, ImpInterface*, Interface*, BOOL suppressPrompts) override {
+        return tfu2::ImportiereEingang(name, suppressPrompts);
+    }
+};
+
+class TFU2SceneImportClassDesc : public ClassDesc2 {
+public:
+    int IsPublic() override { return TRUE; }
+    // new statt statischem Objekt: Max gibt die Importer-Instanz selbst frei.
+    void* Create(BOOL) override { return new TFU2SceneImport(); }
+    const MCHAR* ClassName() override { return _T("TFU2 Import"); }
+#if defined(MAX_RELEASE) && (MAX_RELEASE >= 24000)
+    const MCHAR* NonLocalizedClassName() override { return _T("TFU2 Import"); }
+#endif
+    SClass_ID SuperClassID() override { return SCENE_IMPORT_CLASS_ID; }
+    Class_ID ClassID() override { return TFU2IMPORT_SCENE_CLASS_ID; }
+    const MCHAR* Category() override { return _T("Import"); }
+    const MCHAR* InternalName() override { return _T("TFU2SceneImport"); }
+    HINSTANCE HInstance() override { return hInstance; }
+};
+
+static TFU2SceneImportClassDesc theSceneImportClassDesc;
+
+// ------------------------------------------------------------
+//  MAXScript: Tfu2Cpp
+//
+//    Tfu2Cpp.showDialog()                          das Fenster
+//    Tfu2Cpp.version()                             Fassung der .dlu
+//    Tfu2Cpp.importCharacter <ordner> <name>       Figur ohne Fenster (Tests)
+//    Tfu2Cpp.applyAnimation <ordner> <pfad> <bool> Clip ohne Fenster (Tests)
+//
+//  Die beiden letzten liefern den Bericht; "ERROR: ..." bei Fehlern.
+// ------------------------------------------------------------
+class TFU2ImportFP : public FPStaticInterface {
+public:
+    enum { fn_showDialog = 0, fn_version = 1, fn_importCharacter = 2, fn_applyAnimation = 3 };
+
+    BOOL showDialog() { return tfu2::OeffneFenster() > 0 ? TRUE : FALSE; }
+    const MCHAR* version() { return TFU2IMPORT_VERSION_STR; }
+
+    const MCHAR* importCharacter(const MCHAR* ordner, const MCHAR* name) {
+        const tfu::Pakete* p = nullptr;
+        const tfu::Katalog* k = nullptr;
+        std::string fehler;
+        static MSTR antwort;
+        if (!tfu2::Spiel(ordner ? ordner : _T(""), p, k, fehler)) { antwort = MSTR(_T("ERROR: ")) + MSTR::FromUTF8(fehler.c_str()); return antwort.data(); }
+        const std::string w = tfu::Klein(tfu::Utf8(name ? name : _T("")));
+        const tfu::FigurEintrag* f = nullptr;
+        for (const auto& e : k->figuren) if (tfu::Klein(e.name) == w || tfu::Klein(e.gto) == w) { f = &e; break; }
+        if (f == nullptr) { antwort = _T("ERROR: no such character"); return antwort.data(); }
+        std::wstring bericht;
+        tfu2::ImportOptionen o;
+        const bool ok = tfu2::ImportiereFigur(*p, *f, o, bericht);
+        antwort = MSTR(ok ? _T("") : _T("ERROR: ")) + MSTR(bericht.c_str());
+        return antwort.data();
+    }
+
+    const MCHAR* applyAnimation(const MCHAR* ordner, const MCHAR* pfad, BOOL wurzel) {
+        const tfu::Pakete* p = nullptr;
+        const tfu::Katalog* k = nullptr;
+        std::string fehler;
+        static MSTR antwort;
+        if (!tfu2::Spiel(ordner ? ordner : _T(""), p, k, fehler)) { antwort = MSTR(_T("ERROR: ")) + MSTR::FromUTF8(fehler.c_str()); return antwort.data(); }
+        std::wstring bericht;
+        const bool ok = tfu2::WendeAnimationAn(*p, tfu::Utf8(pfad ? pfad : _T("")), wurzel != FALSE, bericht);
+        antwort = MSTR(ok ? _T("") : _T("ERROR: ")) + MSTR(bericht.c_str());
+        return antwort.data();
+    }
+
+    DECLARE_DESCRIPTOR(TFU2ImportFP)
+    BEGIN_FUNCTION_MAP
+        FN_0(fn_showDialog, TYPE_BOOL, showDialog)
+        FN_0(fn_version, TYPE_STRING, version)
+        FN_2(fn_importCharacter, TYPE_STRING, importCharacter, TYPE_STRING, TYPE_STRING)
+        FN_3(fn_applyAnimation, TYPE_STRING, applyAnimation, TYPE_STRING, TYPE_STRING, TYPE_BOOL)
+    END_FUNCTION_MAP
+};
+
+static TFU2ImportFP theTFU2ImportFP(
+    TFU2IMPORT_FP_ID, _T("Tfu2Cpp"), 0, &theSceneImportClassDesc, FP_CORE,
+    TFU2ImportFP::fn_showDialog, _T("showDialog"), 0, TYPE_BOOL, 0, 0,
+    TFU2ImportFP::fn_version, _T("version"), 0, TYPE_STRING, 0, 0,
+    TFU2ImportFP::fn_importCharacter, _T("importCharacter"), 0, TYPE_STRING, 0, 2,
+        _T("gameFolder"), 0, TYPE_STRING,
+        _T("name"), 0, TYPE_STRING,
+    TFU2ImportFP::fn_applyAnimation, _T("applyAnimation"), 0, TYPE_STRING, 0, 3,
+        _T("gameFolder"), 0, TYPE_STRING,
+        _T("animation"), 0, TYPE_STRING,
+        _T("rootMotion"), 0, TYPE_BOOL,
+    p_end);
+
+__declspec(dllexport) const TCHAR* LibDescription() {
+    return _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T(" - Star Wars: The Force Unleashed II Importer");
+}
+__declspec(dllexport) int LibNumberClasses() { return 1; }
+__declspec(dllexport) ClassDesc* LibClassDesc(int i) { return (i == 0) ? &theSceneImportClassDesc : nullptr; }
+__declspec(dllexport) ULONG LibVersion() { return VERSION_3DSMAX; }
+
+// Fehlt die Anmeldung des Kerninterfaces, wird sie nachgeholt (Lehre aus dem SWBF2 Import).
+__declspec(dllexport) int LibInitialize() {
+    static bool erledigt = false;
+    if (erledigt) return TRUE;
+    erledigt = true;
+    if (GetCOREInterface(TFU2IMPORT_FP_ID) == nullptr) RegisterCOREInterface(&theTFU2ImportFP);
+    return TRUE;
+}
+__declspec(dllexport) int CanAutoDefer() { return FALSE; }

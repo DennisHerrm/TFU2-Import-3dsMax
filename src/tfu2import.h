@@ -1,0 +1,62 @@
+// ============================================================
+//  TFU2 Import - Plugin-Kopf
+//
+//  Figuren aus Star Wars: The Force Unleashed II direkt aus den
+//  Spielpaketen (LevelPacks\pak*.lp) nach 3ds Max: Skelett, Meshes,
+//  Skinning, Materialien mit Texturen, Animationen.
+//
+//  Der Leser (tfu_*.h) ist derselbe, den tfudump.exe benutzt.
+// ============================================================
+#pragma once
+
+#include "tfu_katalog.h"
+
+#include <max.h>
+#include <iparamb2.h>
+#include <impexp.h>
+#include <istdplug.h>
+
+#include <string>
+
+#define TFU2IMPORT_VERSION      100
+#define TFU2IMPORT_VERSION_STR  _T("0.1.0")
+
+// Einmalig gezogen, nie wieder aendern.
+#define TFU2IMPORT_SCENE_CLASS_ID  Class_ID(0x4c1e7b93, 0x2a6f0d58)
+#define TFU2IMPORT_FP_ID           Interface_ID(0x71d3a25e, 0x0b94c6f1)
+
+namespace tfu2 {
+
+// Ablage: %LOCALAPPDATA%\TFU2Import (Einstellungen, Protokoll, Texturen)
+std::wstring Ablage();
+std::wstring LiesEinstellung(const std::wstring& schluessel);
+void SchreibeEinstellung(const std::wstring& schluessel, const std::wstring& wert);
+
+// Protokoll nach Ablage()\import.log
+void LogNeu(const char* titel);
+void Log(const char* format, ...);
+
+// Spiel laden (Pakete + Katalog), einmal je Ordner.
+bool Spiel(const std::wstring& ordner, const tfu::Pakete*& pakete, const tfu::Katalog*& katalog, std::string& fehler);
+
+struct ImportOptionen {
+    bool texturen = true;
+    bool skin = true;
+};
+
+// Figur importieren; bericht = Zusammenfassung fuer den Anwender.
+bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const ImportOptionen& o, std::wstring& bericht);
+
+// Clip auf das Skelett in der Szene legen (Auswahl, sonst das zuletzt importierte).
+bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, std::wstring& bericht);
+
+// Knochen-CRCs der Figur in der Szene (sortiert; leer wenn keine) und ihr Name.
+std::vector<uint32_t> CrcsInSzene(std::string* figur = nullptr);
+
+// Das Fenster
+int OeffneFenster();
+
+// Datei -> Importieren: .lp oder SWTFU2.exe oeffnet das Fenster, .gto importiert eine lose Datei.
+int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen);
+
+} // namespace tfu2

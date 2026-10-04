@@ -1,0 +1,5 @@
+build_*/
+output/
+*.log
+chars.txt
+package/TFU2Import/Contents/

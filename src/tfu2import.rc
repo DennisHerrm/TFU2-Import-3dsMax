@@ -1,0 +1,35 @@
+#include "tfu2import_res.h"
+#include <winres.h>
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+IDD_TFU2 DIALOGEX 0, 0, 560, 330
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+CAPTION "TFU2 Import - Star Wars: The Force Unleashed II"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Game folder:", -1, 7, 9, 44, 8
+    EDITTEXT        IDC_ORDNER, 54, 7, 384, 13, ES_AUTOHSCROLL
+    PUSHBUTTON      "Browse...", IDC_DURCHSUCHEN, 442, 7, 52, 13
+    PUSHBUTTON      "Load", IDC_LADEN, 498, 7, 55, 13
+
+    GROUPBOX        "Characters", -1, 7, 26, 270, 278
+    LTEXT           "Filter:", -1, 13, 40, 20, 8
+    EDITTEXT        IDC_FFILTER, 36, 38, 235, 13, ES_AUTOHSCROLL
+    LISTBOX         IDC_FIGUREN, 13, 54, 258, 212, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "", IDC_FZAHL, 13, 270, 120, 8
+    AUTOCHECKBOX    "Textures", IDC_TEXTUREN, 13, 284, 50, 10
+    AUTOCHECKBOX    "Static parts", IDC_STATISCH, 66, 284, 60, 10
+    DEFPUSHBUTTON   "Import character", IDC_IMPORT, 181, 282, 90, 16
+
+    GROUPBOX        "Animations", -1, 283, 26, 270, 278
+    LTEXT           "Filter:", -1, 289, 40, 20, 8
+    EDITTEXT        IDC_AFILTER, 312, 38, 235, 13, ES_AUTOHSCROLL
+    LISTBOX         IDC_ANIMS, 289, 54, 258, 212, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "", IDC_AZAHL, 289, 270, 178, 8
+    COMBOBOX        IDC_AART, 470, 268, 77, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Root motion", IDC_WURZEL, 289, 284, 70, 10
+    PUSHBUTTON      "Apply to skeleton", IDC_ANWENDEN, 457, 282, 90, 16
+
+    LTEXT           "", IDC_STATUS, 7, 310, 546, 16, SS_NOPREFIX
+END

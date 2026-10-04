@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage
+    SchemaVersion="1.0"
+    AutodeskProduct="3ds Max"
+    ProductType="Application"
+    Name="TFU2Import"
+    Description="Star Wars: The Force Unleashed II Importer"
+    AppVersion="0.1.0"
+    FriendlyVersion="0.1.0"
+    Author="DH"
+    UpgradeCode="{7B9E0AC2-B683-4310-B14C-9AC1897B761E}"
+    ProductCode="{1213089D-C03D-42B3-B575-051ED77364ED}">
+
+    <!-- UpgradeCode bleibt fuer immer; ProductCode bei jeder neuen AppVersion neu. -->
+
+    <CompanyDetails Name="DH" />
+    <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2026" SeriesMax="2026" />
+
+    <!-- Je Max-Jahrgang ein Block, jede .dlu gegen ihr eigenes SDK gebaut.
+         Vorerst nur 2026; weitere Jahrgaenge kommen hier dazu. -->
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2026" SeriesMax="2026" />
+        <ComponentEntry AppName="TFU2Import" Version="0.1.0"
+                        ModuleName="./Contents/2026/TFU2Import.dlu"
+                        AppDescription="TFU2 Importer (character window, .gto)" />
+    </Components>
+
+    <Components Description="macroscripts parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2026" SeriesMax="2026" />
+        <ComponentEntry AppName="TFU2ImportMacro" Version="0.1.0"
+                        ModuleName="./Contents/MacroScripts/TFU2Import.mcr"
+                        AppDescription="Menu command Import TFU2" />
+    </Components>
+
+    <!-- Ab 2025 PRE-start-up: #cuiRegisterMenus muss vor dem Menueaufbau angemeldet sein. -->
+    <Components Description="pre-start-up scripts parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2026" SeriesMax="2026" />
+        <ComponentEntry AppName="TFU2ImportMenu" Version="0.1.0"
+                        ModuleName="./Contents/Pre-Start-Up_Scripts/TFU2Menu_2025_2027.ms"
+                        AppDescription="Menu TFU2 Tool (CuiMenuManager)" />
+    </Components>
+</ApplicationPackage>
