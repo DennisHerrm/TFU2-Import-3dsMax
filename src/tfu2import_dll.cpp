@@ -103,7 +103,7 @@ public:
             if (tfu::PasstZu(crcs[i], sk) && (anzahl <= 0 || static_cast<int>(pfade.size()) < anzahl)) pfade.push_back(k->animationen[i].pfad);
         std::vector<tfu2::Sequenz> plan;
         std::wstring bericht;
-        const bool ok = tfu2::WendeFolgeAn(*p, pfade, 10, true, true, std::string(), plan, bericht);
+        const bool ok = tfu2::WendeFolgeAn(*p, pfade, 10, true, true, true, std::string(), plan, bericht);
         antwort = MSTR(ok ? _T("") : _T("ERROR: ")) + MSTR(bericht.c_str());
         return antwort.data();
     }
@@ -133,7 +133,7 @@ public:
         static MSTR antwort;
         if (!tfu2::Spiel(ordner ? ordner : _T(""), p, k, fehler)) { antwort = MSTR(_T("ERROR: ")) + MSTR::FromUTF8(fehler.c_str()); return antwort.data(); }
         std::wstring bericht;
-        const bool ok = tfu2::WendeAnimationAn(*p, tfu::Utf8(pfad ? pfad : _T("")), wurzel != FALSE, std::string(), bericht);
+        const bool ok = tfu2::WendeAnimationAn(*p, tfu::Utf8(pfad ? pfad : _T("")), wurzel != FALSE, true, std::string(), bericht);
         antwort = MSTR(ok ? _T("") : _T("ERROR: ")) + MSTR(bericht.c_str());
         return antwort.data();
     }

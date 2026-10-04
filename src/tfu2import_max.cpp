@@ -834,15 +834,65 @@ std::vector<const tfu::AnimSpur*> SpurenJeKnochen(const tfu::AnimClip& c, const 
     return aus;
 }
 
+// ------------------------------------------------------------
+//  "Face front": die Wurzel am Clipanfang nach vorn drehen.
+//
+//  Gemessen an 789 Starkiller-Clips: root[0] steht am ersten Key meist
+//  +90 Grad (559) oder -90 Grad (177) um Y gedreht, nur 24 Clips gerade.
+//  Im Spiel ist das gleichgueltig - die Wurzelbewegung wird RELATIV zur
+//  Blickrichtung der Figur angewendet. In Max blickte die Figur dadurch
+//  meist nach rechts. Deshalb: Gier und waagerechte Lage des ersten
+//  Wurzel-Keys herausrechnen; jeder Clip beginnt im Ursprung und blickt
+//  nach vorn, Drehungen und Wege WAEHREND des Clips bleiben erhalten.
+// ------------------------------------------------------------
+struct Ausrichtung {
+    bool aktiv = false;
+    size_t wurzel = static_cast<size_t>(-1);    // Index in ZielSkelett::knochen
+    Matrix3 y;                                  // Gegendrehung um die Hochachse (Spielraum)
+    Point3 t0 = Point3(0.0f, 0.0f, 0.0f);       // waagerechte Startlage
+};
+
 // Lokale Lage bei Key k (Drehung/Verschiebung aus der Spur, was fehlt aus der Ruhelage).
-Matrix3 LokalBei(const Bein& b, const tfu::AnimSpur* s, size_t k, bool wurzelBewegung) {
+Matrix3 LokalBei(const Bein& b, const tfu::AnimSpur* s, size_t k, bool wurzelBewegung, const Ausrichtung* aus = nullptr,
+                 size_t bi = static_cast<size_t>(-1)) {
     Matrix3 l = b.ruhe;
     if (s == nullptr) return l;
     const Point3 t0 = l.GetRow(3);
     if (s->hatR) QuatInZeilen(&s->r[k * 4], l);
     l.SetRow(3, t0);
     if (s->hatT && !(b.istWurzel && !wurzelBewegung)) l.SetRow(3, Point3(s->t[k * 3], s->t[k * 3 + 1], s->t[k * 3 + 2]));
+    if (aus != nullptr && aus->aktiv && bi == aus->wurzel) {
+        l.SetRow(3, l.GetRow(3) - aus->t0);
+        l = l * aus->y;
+    }
     return l;
+}
+
+Ausrichtung RichteAus(const ZielSkelett& z, const std::vector<const tfu::AnimSpur*>& spuren, bool wurzelBewegung, bool nachVorn) {
+    Ausrichtung a;
+    if (!nachVorn) return a;
+    for (size_t i = 0; i < z.knochen.size(); ++i) {
+        const MCHAR* n = z.knochen[i].n->GetName();
+        if (n != nullptr && std::wstring(n) == L"root[0]") { a.wurzel = i; break; }
+    }
+    if (a.wurzel == static_cast<size_t>(-1))
+        for (size_t i = 0; i < z.knochen.size(); ++i) if (z.knochen[i].istWurzel && spuren[i] != nullptr) { a.wurzel = i; break; }
+    if (a.wurzel == static_cast<size_t>(-1) || spuren[a.wurzel] == nullptr) return a;
+    const Matrix3 l0 = LokalBei(z.knochen[a.wurzel], spuren[a.wurzel], 0, wurzelBewegung);
+    const Point3 x = l0.GetRow(0);                         // lokale X-Achse in der Welt
+    const double gier = std::atan2(-static_cast<double>(x.z), static_cast<double>(x.x));
+    const float c = static_cast<float>(std::cos(gier)), sn = static_cast<float>(std::sin(gier));
+    a.y.IdentityMatrix();
+    a.y.SetRow(0, Point3(c, 0.0f, sn));
+    a.y.SetRow(1, Point3(0.0f, 1.0f, 0.0f));
+    a.y.SetRow(2, Point3(-sn, 0.0f, c));
+    a.y.SetRow(3, Point3(0.0f, 0.0f, 0.0f));
+    if (wurzelBewegung) {
+        const Point3 t = l0.GetRow(3);
+        a.t0 = Point3(t.x, 0.0f, t.z);
+    }
+    a.aktiv = true;
+    return a;
 }
 
 // Keys setzen mit fortlaufendem Quaternion-Vorzeichen.
@@ -927,7 +977,8 @@ std::vector<SzenenFigur> FigurenInSzene() {
     return aus;
 }
 
-bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, const std::string& id, std::wstring& bericht) {
+bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, bool nachVorn, const std::string& id,
+                      std::wstring& bericht) {
     Interface* ip = GetCOREInterface();
     LogNeu(("Animation " + animPfad).c_str());
     ZielSkelett z;
@@ -955,6 +1006,7 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
     const int tpf = GetTicksPerFrame();
     const float mass = Massstab();
     const std::vector<const tfu::AnimSpur*> spuren = SpurenJeKnochen(c, z);
+    const Ausrichtung aus = RichteAus(z, spuren, wurzelBewegung, nachVorn);
     size_t keys = 0, mitKeys = 0, flips = 0;
     theHold.Suspend();
     ip->DisableSceneRedraw();
@@ -972,7 +1024,7 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
         if (s == nullptr) continue;
         ++mitKeys;
         AnimateOn();
-        for (size_t k = 0; k < s->keys.size(); ++k) ks.Setze(static_cast<TimeValue>(s->keys[k]) * tpf, LokalBei(b, s, k, wurzelBewegung));
+        for (size_t k = 0; k < s->keys.size(); ++k) ks.Setze(static_cast<TimeValue>(s->keys[k]) * tpf, LokalBei(b, s, k, wurzelBewegung, &aus, i));
         AnimateOff();
         keys += ks.keys;
         flips += ks.flips;
@@ -992,7 +1044,7 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
     return true;
 }
 
-bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, int abstand, bool notiz, bool wurzelBewegung,
+bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, int abstand, bool notiz, bool wurzelBewegung, bool nachVorn,
                   const std::string& id, std::vector<Sequenz>& plan, std::wstring& bericht) {
     const auto t0 = std::chrono::steady_clock::now();
     Interface* ip = GetCOREInterface();
@@ -1034,6 +1086,8 @@ bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, i
     std::vector<std::vector<const tfu::AnimSpur*>> spuren;
     spuren.reserve(clips.size());
     for (const tfu::AnimClip& c : clips) spuren.push_back(SpurenJeKnochen(c, z));
+    std::vector<Ausrichtung> ausr;
+    for (const auto& sp : spuren) ausr.push_back(RichteAus(z, sp, wurzelBewegung, nachVorn));
 
     const float mass = Massstab();
     size_t keys = 0, flips = 0;
@@ -1061,13 +1115,13 @@ bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, i
                 continue;
             }
             const size_t n = s->keys.size();
-            if (s->keys.front() > 0) ks.Setze(a, LokalBei(b, s, 0, wurzelBewegung));
+            if (s->keys.front() > 0) ks.Setze(a, LokalBei(b, s, 0, wurzelBewegung, &ausr[c], i));
             for (size_t k = 0; k < n; ++k) {
                 const TimeValue t = a + static_cast<TimeValue>(s->keys[k]) * tpf;
                 if (t > e) break;
-                ks.Setze(t, LokalBei(b, s, k, wurzelBewegung));
+                ks.Setze(t, LokalBei(b, s, k, wurzelBewegung, &ausr[c], i));
             }
-            if (a + static_cast<TimeValue>(s->keys[n - 1]) * tpf < e) ks.Setze(e, LokalBei(b, s, n - 1, wurzelBewegung));
+            if (a + static_cast<TimeValue>(s->keys[n - 1]) * tpf < e) ks.Setze(e, LokalBei(b, s, n - 1, wurzelBewegung, &ausr[c], i));
         }
         AnimateOff();
         keys += ks.keys;

@@ -311,6 +311,7 @@ std::vector<size_t> Katalog::EigeneAnimationen(const Pakete& p, const FigurEintr
     std::vector<size_t> aus;
     for (size_t i = 0; i < animationen.size(); ++i) {
         const AnimEintrag& a = animationen[i];
+        if (!KuerzelPasst(f, a)) continue;          // Gegenseite eines Finishers/Saberlocks
         const std::string n = Klein(a.name);
         if (ids.count(n)) { aus.push_back(i); continue; }
         // 3. Zwischensequenzen: "igc_KAM2_070_JunoAttackVader_juno" - das letzte Glied nennt die Figur.
@@ -330,9 +331,33 @@ std::vector<size_t> Katalog::EigeneAnimationen(const Pakete& p, const FigurEintr
     return aus;
 }
 
+bool KuerzelPasst(const FigurEintrag& f, const AnimEintrag& a) {
+    // Gemessen: haeufigstes Zweibuchstaben-Glied der Clips je Rig-Ordner.
+    static const char* const kRig[][2] = {
+        { "maleaverage", "ma" }, { "malebrute", "mb" }, { "femaleaverage", "fa" }, { "maledwarf", "md" },
+        { "giant", "ga" }, { "terrorgiant", "ga" }, { "gorillaboss", "gb" }, { "titandroid", "td" },
+        { "astromech", "am" }, { "titanspawn", "ds" }, { "droidspawn", "ds" },
+    };
+    static const char* const kAlle[] = { "ma", "mb", "fa", "md", "ga", "gb", "td", "am", "ds", "gs", "pd", "dm", "my" };
+    const std::string rig = Klein(f.rig);
+    std::string eigenes;
+    for (const auto& r : kRig) if (rig == r[0]) eigenes = r[1];
+    if (eigenes.empty()) return true;                 // Einzelstuecke (unique): kein Kuerzel bekannt
+    const std::string n = "_" + Klein(a.name) + "_";
+    bool fremd = false;
+    for (const char* k : kAlle) {
+        const std::string glied = std::string("_") + k + "_";
+        if (n.find(glied) == std::string::npos) continue;
+        if (eigenes == k) return true;
+        fremd = true;
+    }
+    return !fremd;
+}
+
 bool GleichesRig(const FigurEintrag& f, const AnimEintrag& a) {
     // "unique" ist ein Sammelordner fuer Einzelstuecke (Gonk, Sonden-Droide,
     // AT-ST, Yoda ...) - dort zaehlt nur der Ordner der Figur selbst.
+    if (!KuerzelPasst(f, a)) return false;
     std::string rig = Klein(f.rig);
     if (rig == "unique") rig.clear();
     const std::string figur = Klein(Blatt(f.ordner));

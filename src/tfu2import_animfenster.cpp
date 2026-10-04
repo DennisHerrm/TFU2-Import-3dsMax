@@ -49,6 +49,7 @@ struct Fenster {
     std::vector<Sequenz> sequenzen;
     bool notiz = true;
     bool wurzel = true;
+    bool vorn = true;
     std::wstring status;
     bool statusFehler = false;
 };
@@ -229,7 +230,7 @@ void Laden(Fenster& f) {
     const tfu::AnimEintrag& a = f.katalog->animationen[f.sichtbar[static_cast<size_t>(sel)]];
     std::wstring bericht;
     HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    const bool ok = WendeAnimationAn(*f.pakete, a.pfad, f.wurzel, FigurId(f), bericht);
+    const bool ok = WendeAnimationAn(*f.pakete, a.pfad, f.wurzel, f.vorn, FigurId(f), bericht);
     SetCursor(alt);
     Status(f, bericht, !ok);
     if (ok) {
@@ -259,7 +260,7 @@ void AlleLaden(Fenster& f) {
     HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
     std::wstring bericht;
     std::vector<Sequenz> plan;
-    const bool gut = WendeFolgeAn(*f.pakete, pfade, abstand, f.notiz, f.wurzel, FigurId(f), plan, bericht);
+    const bool gut = WendeFolgeAn(*f.pakete, pfade, abstand, f.notiz, f.wurzel, f.vorn, FigurId(f), plan, bericht);
     SetCursor(alt);
     Status(f, bericht, !gut);
     if (gut) {
@@ -351,6 +352,7 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         SetDlgItemInt(h, IDC_A_ABSTAND, abstand.empty() ? 10 : static_cast<UINT>(_wtoi(abstand.c_str())), FALSE);
         f->notiz = LiesEinstellung(L"Notizspur") != L"0";
         f->wurzel = LiesEinstellung(L"Wurzelbewegung") != L"0";
+        f->vorn = LiesEinstellung(L"NachVorn") != L"0";
         f->zeige = std::clamp(_wtoi(LiesEinstellung(L"Zeige").c_str()), 0, 3);
         for (const wchar_t* t : kZeige) SendDlgItemMessageW(h, IDC_A_ZEIGE, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t));
         SendDlgItemMessageW(h, IDC_A_ZEIGE, CB_SETCURSEL, static_cast<WPARAM>(f->zeige), 0);
@@ -386,6 +388,7 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_A_SEQUENZ: tfu2ui::ZeichneAuswahlfeld(f->pal, f->fontNormal, *d); return TRUE;
         case IDC_A_NOTIZ: tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, f->notiz); return TRUE;
         case IDC_A_WURZEL: tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, f->wurzel); return TRUE;
+        case IDC_A_VORN: tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, f->vorn); return TRUE;
         case IDC_A_LADEN: tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, true); return TRUE;
         default: tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, false); return TRUE;
         }
@@ -424,6 +427,11 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             f->wurzel = !f->wurzel;
             SchreibeEinstellung(L"Wurzelbewegung", f->wurzel ? L"1" : L"0");
             InvalidateRect(GetDlgItem(h, IDC_A_WURZEL), nullptr, TRUE);
+            return TRUE;
+        case IDC_A_VORN:
+            f->vorn = !f->vorn;
+            SchreibeEinstellung(L"NachVorn", f->vorn ? L"1" : L"0");
+            InvalidateRect(GetDlgItem(h, IDC_A_VORN), nullptr, TRUE);
             return TRUE;
         case IDC_A_LISTE:
             if (code == LBN_DBLCLK) Laden(*f);

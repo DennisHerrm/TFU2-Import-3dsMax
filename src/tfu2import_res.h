@@ -34,3 +34,4 @@
 #define IDC_A_WURZEL        1110
 #define IDC_A_ALLE          1111
 #define IDC_A_LADEN         1112
+#define IDC_A_VORN          1113

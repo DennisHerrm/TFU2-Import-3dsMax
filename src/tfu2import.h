@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#define TFU2IMPORT_VERSION      200
-#define TFU2IMPORT_VERSION_STR  _T("0.2.0")
+#define TFU2IMPORT_VERSION      201
+#define TFU2IMPORT_VERSION_STR  _T("0.2.1")
 
 // Einmalig gezogen, nie wieder aendern.
 #define TFU2IMPORT_SCENE_CLASS_ID  Class_ID(0x4c1e7b93, 0x2a6f0d58)
@@ -62,13 +62,13 @@ struct Sequenz {
     int start = 0, ende = 0;
 };
 
-// Clip auf eine Figur legen. id leer = Auswahl, sonst die zuletzt importierte.
-bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, const std::string& id,
+// Clip auf eine Figur legen. nachVorn: Wurzel am Clipanfang nach vorn und in den Ursprung. id leer = Auswahl, sonst die zuletzt importierte.
+bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, bool nachVorn, const std::string& id,
                       std::wstring& bericht);
 
 // Viele Clips hintereinander in die Zeitleiste (Bindepose auf Bild 0, Abstand
 // in Bildern), mit Notizspur und Custom Attributes NeoDexSequenceData.
-bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, int abstand, bool notiz, bool wurzelBewegung,
+bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, int abstand, bool notiz, bool wurzelBewegung, bool nachVorn,
                   const std::string& id, std::vector<Sequenz>& plan, std::wstring& bericht);
 bool LiesSequenzen(std::vector<Sequenz>& aus);
 void ZeigeBereich(int startBild, int endeBild);

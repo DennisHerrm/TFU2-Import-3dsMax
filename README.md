@@ -9,7 +9,7 @@ You need your own copy of the game.*
 
 ## Status
 
-Version 0.2.0 – builds for **3ds Max 2016 to 2027**.
+Version 0.2.1 – builds for **3ds Max 2016 to 2027**.
 
 ## Install
 
@@ -38,6 +38,11 @@ Menu **TFU2 Tool** with two windows (or *File → Import* and pick `pak0.lp` /
     `NeoDexSequenceData` on the scene root (as in SWBF2 Import / WhiteoutDex).
     *Sequence* jumps the time slider to one clip.
   * *Root motion* off keeps the character in place.
+  * *Face front* (default on) turns every clip so it starts at the origin facing the
+    front view. In the game the root motion is relative to where the character
+    looks; most clips start with the root turned ±90°.
+  * Clips of the other side of a finisher or saber lock (giant `_ga_`, Vader `_mb_` …)
+    are not offered as the character's own clips.
 
 Files: `%LOCALAPPDATA%\TFU2Import\` holds the settings, `import.log` and the extracted
 textures (normal maps are converted from DXT5nm to regular RGB PNGs).

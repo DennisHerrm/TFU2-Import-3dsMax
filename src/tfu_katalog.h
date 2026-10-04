@@ -75,6 +75,12 @@ std::vector<uint32_t> ModellCrcs(const Pakete& p, const std::string& gto);
 // Ordner trennt maleAverage von maleBrute.
 bool GleichesRig(const FigurEintrag& f, const AnimEintrag& a);
 
+// Rig-Kuerzel im Clipnamen ("TFU2_player_ma_com_...", "TFU2_vader_mb_...").
+// Traegt ein Clip ein Kuerzel eines Rigs, muss es das der Figur sein - sonst
+// ist es die Gegenseite eines Finishers/Saberlocks (Riese, Vader ...), deren
+// Knochen zwar gleich heissen, aber ganz andere Laengen haben.
+bool KuerzelPasst(const FigurEintrag& f, const AnimEintrag& a);
+
 // Passt ein Clip zu einem Skelett? Mindestens die Haelfte seiner Spuren
 // muss im Skelett vorkommen (und wenigstens vier, wo es so viele gibt).
 bool PasstZu(const std::vector<uint32_t>& clip, const std::vector<uint32_t>& skelettSortiert);
