@@ -69,7 +69,10 @@ static TFU2SceneImportClassDesc theSceneImportClassDesc;
 // ------------------------------------------------------------
 //  MAXScript: Tfu2Cpp
 //
-//    Tfu2Cpp.showDialog()                          das Fenster
+//    Tfu2Cpp.showDialog()                          das Figurenfenster
+//    Tfu2Cpp.showAnimDialog()                      das Animationsfenster
+//    Tfu2Cpp.loadOwnAnimations <ordner> <n>        die ersten n eigenen Clips der
+//                                                  Figur in die Zeitleiste (Tests)
 //    Tfu2Cpp.version()                             Fassung der .dlu
 //    Tfu2Cpp.importCharacter <ordner> <name>       Figur ohne Fenster (Tests)
 //    Tfu2Cpp.applyAnimation <ordner> <pfad> <bool> Clip ohne Fenster (Tests)
@@ -78,9 +81,32 @@ static TFU2SceneImportClassDesc theSceneImportClassDesc;
 // ------------------------------------------------------------
 class TFU2ImportFP : public FPStaticInterface {
 public:
-    enum { fn_showDialog = 0, fn_version = 1, fn_importCharacter = 2, fn_applyAnimation = 3 };
+    enum { fn_showDialog = 0, fn_version = 1, fn_importCharacter = 2, fn_applyAnimation = 3, fn_showAnimDialog = 4, fn_loadOwn = 5 };
 
-    BOOL showDialog() { return tfu2::OeffneFenster() > 0 ? TRUE : FALSE; }
+    BOOL showDialog() { return tfu2::OeffneFenster() >= 0 ? TRUE : FALSE; }
+    BOOL showAnimDialog() { return tfu2::OeffneAnimFenster() >= 0 ? TRUE : FALSE; }
+
+    const MCHAR* loadOwnAnimations(const MCHAR* ordner, int anzahl) {
+        const tfu::Pakete* p = nullptr;
+        const tfu::Katalog* k = nullptr;
+        std::string fehler;
+        static MSTR antwort;
+        if (!tfu2::Spiel(ordner ? ordner : _T(""), p, k, fehler)) { antwort = MSTR(_T("ERROR: ")) + MSTR::FromUTF8(fehler.c_str()); return antwort.data(); }
+        std::string gto;
+        const std::vector<uint32_t> sk = tfu2::CrcsInSzene(std::string(), &gto);
+        const tfu::FigurEintrag* f = nullptr;
+        for (const auto& e : k->figuren) if (tfu::Klein(e.gto) == tfu::Klein(gto)) { f = &e; break; }
+        if (f == nullptr || sk.empty()) { antwort = _T("ERROR: no TFU2 character in the scene"); return antwort.data(); }
+        const auto& crcs = k->AnimCrcs(*p);
+        std::vector<std::string> pfade;
+        for (size_t i : k->EigeneAnimationen(*p, *f))
+            if (tfu::PasstZu(crcs[i], sk) && (anzahl <= 0 || static_cast<int>(pfade.size()) < anzahl)) pfade.push_back(k->animationen[i].pfad);
+        std::vector<tfu2::Sequenz> plan;
+        std::wstring bericht;
+        const bool ok = tfu2::WendeFolgeAn(*p, pfade, 10, true, true, std::string(), plan, bericht);
+        antwort = MSTR(ok ? _T("") : _T("ERROR: ")) + MSTR(bericht.c_str());
+        return antwort.data();
+    }
     const MCHAR* version() { return TFU2IMPORT_VERSION_STR; }
 
     const MCHAR* importCharacter(const MCHAR* ordner, const MCHAR* name) {
@@ -107,7 +133,7 @@ public:
         static MSTR antwort;
         if (!tfu2::Spiel(ordner ? ordner : _T(""), p, k, fehler)) { antwort = MSTR(_T("ERROR: ")) + MSTR::FromUTF8(fehler.c_str()); return antwort.data(); }
         std::wstring bericht;
-        const bool ok = tfu2::WendeAnimationAn(*p, tfu::Utf8(pfad ? pfad : _T("")), wurzel != FALSE, bericht);
+        const bool ok = tfu2::WendeAnimationAn(*p, tfu::Utf8(pfad ? pfad : _T("")), wurzel != FALSE, std::string(), bericht);
         antwort = MSTR(ok ? _T("") : _T("ERROR: ")) + MSTR(bericht.c_str());
         return antwort.data();
     }
@@ -118,6 +144,8 @@ public:
         FN_0(fn_version, TYPE_STRING, version)
         FN_2(fn_importCharacter, TYPE_STRING, importCharacter, TYPE_STRING, TYPE_STRING)
         FN_3(fn_applyAnimation, TYPE_STRING, applyAnimation, TYPE_STRING, TYPE_STRING, TYPE_BOOL)
+        FN_0(fn_showAnimDialog, TYPE_BOOL, showAnimDialog)
+        FN_2(fn_loadOwn, TYPE_STRING, loadOwnAnimations, TYPE_STRING, TYPE_INT)
     END_FUNCTION_MAP
 };
 
@@ -132,6 +160,10 @@ static TFU2ImportFP theTFU2ImportFP(
         _T("gameFolder"), 0, TYPE_STRING,
         _T("animation"), 0, TYPE_STRING,
         _T("rootMotion"), 0, TYPE_BOOL,
+    TFU2ImportFP::fn_showAnimDialog, _T("showAnimDialog"), 0, TYPE_BOOL, 0, 0,
+    TFU2ImportFP::fn_loadOwn, _T("loadOwnAnimations"), 0, TYPE_STRING, 0, 2,
+        _T("gameFolder"), 0, TYPE_STRING,
+        _T("count"), 0, TYPE_INT,
     p_end);
 
 __declspec(dllexport) const TCHAR* LibDescription() {

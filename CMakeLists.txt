@@ -74,6 +74,8 @@ if(TFU2_BUILD_PLUGIN)
         src/tfu2import_dll.cpp
         src/tfu2import_max.cpp
         src/tfu2import_fenster.cpp
+        src/tfu2import_animfenster.cpp
+        src/tfu2_ui.h
         src/tfu2import_res.h
         src/tfu2import.rc
         tfu2import.def)
@@ -90,7 +92,7 @@ if(TFU2_BUILD_PLUGIN)
     target_link_directories(TFU2Import PRIVATE "${3DSMAX_SDK_DIR}/lib/x64/Release")
     target_link_libraries(TFU2Import PRIVATE tfuleser
         core.lib maxutil.lib bmm.lib Geom.lib mesh.lib
-        Maxscrpt.lib MNMath.lib Paramblk2.lib comctl32.lib ole32.lib uuid.lib shell32.lib)
+        Maxscrpt.lib MNMath.lib Paramblk2.lib comctl32.lib ole32.lib uuid.lib shell32.lib dwmapi.lib uxtheme.lib advapi32.lib)
     target_compile_definitions(TFU2Import PRIVATE
         _UNICODE UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS
         MAX_JAHRGANG=${MAX_VERSION})

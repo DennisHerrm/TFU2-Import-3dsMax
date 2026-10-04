@@ -1,35 +1,98 @@
+// ============================================================
+//  tfu2import.rc - die beiden Fenster (Aufbau wie beim SWBF2 Import)
+//
+//  Masse in Dialogeinheiten (DLU), damit alles mit Schrift und
+//  Anzeigeskalierung mitwaechst. Abstaende nach Microsofts
+//  Layoutregeln: Rand 7, verwandte Elemente 4, unverwandte 7.
+//  Nur ASCII - rc.exe liest es dann sicher.
+// ============================================================
+#include <windows.h>
 #include "tfu2import_res.h"
-#include <winres.h>
 
-LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
-IDD_TFU2 DIALOGEX 0, 0, 560, 330
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
-CAPTION "TFU2 Import - Star Wars: The Force Unleashed II"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
+IDD_FIGUREN DIALOGEX 0, 0, 440, 306
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN
+EXSTYLE WS_EX_CONTROLPARENT
+CAPTION "TFU2 Import"
+FONT 9, "Segoe UI", 400, 0, 0x0
 BEGIN
-    LTEXT           "Game folder:", -1, 7, 9, 44, 8
-    EDITTEXT        IDC_ORDNER, 54, 7, 384, 13, ES_AUTOHSCROLL
-    PUSHBUTTON      "Browse...", IDC_DURCHSUCHEN, 442, 7, 52, 13
-    PUSHBUTTON      "Load", IDC_LADEN, 498, 7, 55, 13
+    LTEXT           "Game folder", IDC_ORDNER_LABEL, 7, 10, 44, 8
+    LTEXT           "", IDC_ORDNER, 54, 10, 316, 8, SS_PATHELLIPSIS | SS_NOPREFIX
+    PUSHBUTTON      "Browse...", IDC_DURCHSUCHEN, 376, 6, 57, 15, BS_OWNERDRAW | WS_TABSTOP
+    CONTROL         "", IDC_STATUS, "Static", SS_OWNERDRAW, 7, 26, 426, 16
 
-    GROUPBOX        "Characters", -1, 7, 26, 270, 278
-    LTEXT           "Filter:", -1, 13, 40, 20, 8
-    EDITTEXT        IDC_FFILTER, 36, 38, 235, 13, ES_AUTOHSCROLL
-    LISTBOX         IDC_FIGUREN, 13, 54, 258, 212, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "", IDC_FZAHL, 13, 270, 120, 8
-    AUTOCHECKBOX    "Textures", IDC_TEXTUREN, 13, 284, 50, 10
-    AUTOCHECKBOX    "Static parts", IDC_STATISCH, 66, 284, 60, 10
-    DEFPUSHBUTTON   "Import character", IDC_IMPORT, 181, 282, 90, 16
+    PUSHBUTTON      "Starkiller", IDC_TAB0, 7, 48, 74, 15, BS_OWNERDRAW | WS_TABSTOP | WS_GROUP
+    PUSHBUTTON      "Characters", IDC_TAB1, 85, 48, 74, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Creatures + droids", IDC_TAB2, 163, 48, 86, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Other", IDC_TAB3, 253, 48, 56, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "All", IDC_TAB4, 313, 48, 56, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Static parts", IDC_STATISCH, 376, 68, 57, 15, BS_OWNERDRAW | WS_TABSTOP
 
-    GROUPBOX        "Animations", -1, 283, 26, 270, 278
-    LTEXT           "Filter:", -1, 289, 40, 20, 8
-    EDITTEXT        IDC_AFILTER, 312, 38, 235, 13, ES_AUTOHSCROLL
-    LISTBOX         IDC_ANIMS, 289, 54, 258, 212, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "", IDC_AZAHL, 289, 270, 178, 8
-    COMBOBOX        IDC_AART, 470, 268, 77, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX    "Root motion", IDC_WURZEL, 289, 284, 70, 10
-    PUSHBUTTON      "Apply to skeleton", IDC_ANWENDEN, 457, 282, 90, 16
+    LTEXT           "Search", IDC_SUCHE_LABEL, 7, 71, 30, 8
+    EDITTEXT        IDC_SUCHE, 40, 68, 254, 14, ES_AUTOHSCROLL | WS_TABSTOP | NOT WS_BORDER
+    RTEXT           "", IDC_ANZAHL, 298, 71, 72, 8
 
-    LTEXT           "", IDC_STATUS, 7, 310, 546, 16, SS_NOPREFIX
+    LISTBOX         IDC_LISTE, 7, 88, 426, 166, LBS_OWNERDRAWFIXED | LBS_NODATA | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP | NOT WS_BORDER
+    LTEXT           "", IDC_DETAIL, 7, 258, 426, 8, SS_NOPREFIX | SS_ENDELLIPSIS
+
+    LTEXT           "", IDC_FUSS, 7, 287, 166, 8, SS_NOPREFIX | SS_ENDELLIPSIS
+    PUSHBUTTON      "Animations...", IDC_ANIMFENSTER, 241, 283, 68, 16, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Import", IDOK, 313, 283, 58, 16, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Close", IDCANCEL, 375, 283, 58, 16, BS_OWNERDRAW | WS_TABSTOP
+END
+
+IDD_ANIMATIONEN DIALOGEX 0, 0, 440, 314
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN
+EXSTYLE WS_EX_CONTROLPARENT
+CAPTION "TFU2 Animations"
+FONT 9, "Segoe UI", 400, 0, 0x0
+BEGIN
+    LTEXT           "Character", -1, 8, 10, 38, 10
+    COMBOBOX        IDC_A_FIGUR, 48, 8, 140, 220, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Show", -1, 196, 10, 20, 10
+    COMBOBOX        IDC_A_ZEIGE, 218, 8, 74, 220, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Search", -1, 300, 10, 26, 10
+    EDITTEXT        IDC_A_SUCHE, 328, 9, 104, 11, ES_AUTOHSCROLL | NOT WS_BORDER
+    CONTROL         "", IDC_A_KOPF, "Static", SS_OWNERDRAW, 8, 28, 424, 12
+    LISTBOX         IDC_A_LISTE, 8, 41, 424, 192, LBS_OWNERDRAWFIXED | LBS_NODATA | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP | NOT WS_BORDER
+    CONTROL         "", IDC_A_STATUS, "Static", SS_OWNERDRAW, 8, 238, 424, 16
+    LTEXT           "Sequence", -1, 8, 264, 36, 10
+    COMBOBOX        IDC_A_SEQUENZ, 46, 262, 386, 220, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Gap", -1, 8, 291, 18, 10
+    EDITTEXT        IDC_A_ABSTAND, 28, 290, 22, 11, ES_NUMBER | NOT WS_BORDER
+    LTEXT           "frames", -1, 54, 291, 26, 10
+    PUSHBUTTON      "Note track", IDC_A_NOTIZ, 84, 288, 54, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Root motion", IDC_A_WURZEL, 142, 288, 58, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Load all to timeline", IDC_A_ALLE, 204, 288, 104, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Load", IDC_A_LADEN, 312, 288, 58, 15, BS_OWNERDRAW | WS_TABSTOP
+    PUSHBUTTON      "Close", IDCANCEL, 374, 288, 58, 15, BS_OWNERDRAW | WS_TABSTOP
+END
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,2,0,0
+ PRODUCTVERSION 0,2,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "DH"
+            VALUE "FileDescription", "TFU2 Import - Star Wars The Force Unleashed II for 3ds Max"
+            VALUE "FileVersion", "0.2.0"
+            VALUE "InternalName", "TFU2Import"
+            VALUE "OriginalFilename", "TFU2Import.dlu"
+            VALUE "ProductName", "TFU2 Import"
+            VALUE "ProductVersion", "0.2.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
 END

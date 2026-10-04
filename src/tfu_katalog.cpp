@@ -6,6 +6,7 @@
 #include "bcdec.h"
 
 #include <algorithm>
+#include <set>
 #include <cmath>
 #include <cstring>
 
@@ -148,6 +149,7 @@ bool Katalog::Baue(const Pakete& p, std::string& fehler) {
         if (it == nachGto.end()) continue;
         const bool zuordnung = text.find("<ActorMaterialMapping>") != std::string::npos;
         FigurEintrag& fi = figuren[it->second];
+        fi.actors.push_back(e->name);
         if (fi.actor.empty() || (zuordnung && !mitZuordnung[fi.gto])) {
             fi.actor = e->name;
             mitZuordnung[fi.gto] = zuordnung;
@@ -178,8 +180,11 @@ const std::vector<std::vector<uint32_t>>& Katalog::AnimCrcs(const Pakete& p) con
             if (d[k] == 'm' && d[k + 1] == 'i' && d[k + 2] == 'n' && d[k + 3] == 'a') { mi = k; break; }
         if (mi == std::string::npos || mi + 0x40 > d.size()) continue;
         uint32_t n, tab;
+        float dauer;
         std::memcpy(&n, &d[mi + 0x14], 4);
+        std::memcpy(&dauer, &d[mi + 0x18], 4);
         std::memcpy(&tab, &d[mi + 0x30], 4);
+        animationen[i].bilder = (dauer > 0.0f && dauer < 1e5f) ? static_cast<int>(std::lround(dauer * 30.0f)) + 1 : 0;
         const size_t t = mi + 0x40 + tab;
         if (n > 4096 || t + static_cast<size_t>(n) * 16 > d.size()) continue;
         std::vector<uint32_t>& z = animCrcs_[i];
@@ -203,6 +208,125 @@ std::vector<uint32_t> ModellCrcs(const Pakete& p, const std::string& gto) {
         for (size_t i = 0; i < e->Werte(); ++i) aus.push_back(static_cast<uint32_t>(g.Int(*e, i)));
     }
     std::sort(aus.begin(), aus.end());
+    return aus;
+}
+
+namespace {
+
+std::string OhneKommentare(std::string t) {
+    size_t p = 0;
+    while ((p = t.find("<!--", p)) != std::string::npos) {
+        const size_t e = t.find("-->", p + 4);
+        t.erase(p, (e == std::string::npos ? t.size() : e + 3) - p);
+    }
+    return t;
+}
+
+// Alle Werte eines Attributs (name="...") in einem Text.
+std::vector<std::string> AttributWerte(const std::string& text, const std::string& name) {
+    std::vector<std::string> aus;
+    const std::string such = name + "=\"";
+    size_t p = 0;
+    while ((p = text.find(such, p)) != std::string::npos) {
+        const size_t a = p + such.size();
+        const size_t e = text.find('"', a);
+        if (e == std::string::npos) break;
+        aus.push_back(text.substr(a, e - a));
+        p = e + 1;
+    }
+    return aus;
+}
+
+std::string Lesen(const Pakete& p, const std::string& pfad) {
+    std::vector<uint8_t> roh;
+    std::string f;
+    if (!p.Lies(pfad, roh, f)) return std::string();
+    return std::string(roh.begin(), roh.end());
+}
+
+// Glieder ohne Zahl am Ende ("mynock1" -> "mynock")
+std::string OhneZiffern(std::string s) {
+    while (!s.empty() && s.back() >= '0' && s.back() <= '9') s.pop_back();
+    return s;
+}
+
+} // namespace
+
+std::vector<size_t> Katalog::EigeneAnimationen(const Pakete& p, const FigurEintrag& f, std::vector<std::string>* quellen) const {
+    std::vector<std::string> choreDateien;   // .choresetgroup.xml / .choreset.xml
+    std::set<std::string> gesehen;
+    auto merke = [&](const std::string& pfad) {
+        const std::string k = Pakete::Schluessel(pfad);
+        if (!k.empty() && gesehen.insert(k).second && p.Hat(k)) choreDateien.push_back(k);
+    };
+    // 1. Actors (und ihre Basis-Actors): Chore- und Moveset-Resourcen
+    std::vector<std::string> offen(f.actors.begin(), f.actors.end());
+    std::set<std::string> actorsGesehen;
+    while (!offen.empty() && actorsGesehen.size() < 32) {
+        const std::string a = offen.back();
+        offen.pop_back();
+        if (!actorsGesehen.insert(Klein(a)).second) continue;
+        const std::string text = OhneKommentare(Lesen(p, a));
+        size_t pos = 0;
+        while ((pos = text.find("<zed_components_", pos)) != std::string::npos) {
+            const size_t e = text.find('>', pos);
+            const size_t z = text.find('<', e == std::string::npos ? pos + 1 : e);
+            if (e == std::string::npos || z == std::string::npos) break;
+            std::string wert = Trimme(text.substr(e + 1, z - e - 1));
+            if (EndetMit(wert, ".xml")) merke(wert);
+            pos = z;
+        }
+        for (const std::string& b : XmlWerte(text, "mKeyBaseActor")) {
+            if (b.empty()) continue;
+            const std::string blatt = Klein(Blatt(b));
+            for (const PakEintrag& e : p.Eintraege())
+                if (Klein(Blatt(e.name)) == blatt) { offen.push_back(e.name); break; }
+        }
+    }
+    // 2. ChoreData-Ordner mit dem Namen der Figur (DarthVader, Juno, ewok, Player ...)
+    const std::string figurOrdner = Klein(Blatt(f.ordner)), figurName = Klein(f.name);
+    static const char* const kAllgemein[] = { "maleaverage", "malebrute", "common", "props", "femaleaverage", "maledwarf" };
+    for (const PakEintrag& e : p.Eintraege()) {
+        const std::string k = Klein(e.name);
+        const size_t c = k.find("/choredata/");
+        if (c == std::string::npos || !(EndetMit(k, ".choreset.xml") || EndetMit(k, ".choresetgroup.xml"))) continue;
+        const size_t a = c + 11, z = k.find('/', a);
+        if (z == std::string::npos) continue;
+        const std::string ordner = k.substr(a, z - a);
+        bool allgemein = false;
+        for (const char* x : kAllgemein) if (ordner == x) allgemein = true;
+        if (allgemein || ordner.size() < 4) continue;
+        if (figurOrdner.compare(0, ordner.size(), ordner) == 0 || figurName.compare(0, ordner.size(), ordner) == 0) merke(e.name);
+    }
+    // Gruppen aufloesen, AnimIDs einsammeln
+    std::set<std::string> ids;
+    for (size_t i = 0; i < choreDateien.size(); ++i) {
+        const std::string text = OhneKommentare(Lesen(p, choreDateien[i]));
+        if (EndetMit(choreDateien[i], ".choresetgroup.xml")) {
+            for (const std::string& s : AttributWerte(text, "Path")) merke(s);
+        }
+        for (const std::string& id : AttributWerte(text, "AnimID")) ids.insert(Klein(id));
+    }
+    if (quellen != nullptr) *quellen = choreDateien;
+    std::vector<size_t> aus;
+    for (size_t i = 0; i < animationen.size(); ++i) {
+        const AnimEintrag& a = animationen[i];
+        const std::string n = Klein(a.name);
+        if (ids.count(n)) { aus.push_back(i); continue; }
+        // 3. Zwischensequenzen: "igc_KAM2_070_JunoAttackVader_juno" - das letzte Glied nennt die Figur.
+        const std::string g = Klein(a.gruppe);
+        if (g.find("igc") == std::string::npos && g.find("vignette") == std::string::npos) continue;
+        const size_t u = n.rfind('_');
+        const std::string glied = OhneZiffern(u == std::string::npos ? n : n.substr(u + 1));
+        if (glied.size() < 4) continue;
+        for (const std::string& fig : { figurName, figurOrdner }) {
+            if (fig == glied || fig.compare(0, glied.size(), glied) == 0 ||
+                (fig.size() > glied.size() && fig.compare(fig.size() - glied.size(), glied.size(), glied) == 0)) {
+                aus.push_back(i);
+                break;
+            }
+        }
+    }
     return aus;
 }
 

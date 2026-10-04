@@ -53,6 +53,8 @@ if not exist "build_%VER%\CMakeCache.txt" (
   "%CMAKE%" -S . -B "build_%VER%" -G "%GEN%" -A x64 -DTFU2_BUILD_PLUGIN=ON -DTFU2_BUILD_TOOL=OFF -D3DSMAX_SDK_DIR="%SDK%" -DMAX_VERSION=%VER% >> "%LOG%" 2>&1
   if errorlevel 1 goto :fehler
 )
+REM Alte .dlu weg - sonst gilt ein fehlgeschlagener Bau als ok und die alte wird kopiert.
+if exist "build_%VER%\bin\TFU2Import.dlu" del /q "build_%VER%\bin\TFU2Import.dlu"
 "%CMAKE%" --build "build_%VER%" --config Release >> "%LOG%" 2>&1
 if errorlevel 1 goto :fehler
 if not exist "build_%VER%\bin\TFU2Import.dlu" goto :fehler

@@ -29,12 +29,14 @@ struct FigurEintrag {
     std::string rig;           // z.B. maleAverage
     std::string actor;         // *.actor.xml, die das Modell benutzt (kann leer sein)
     bool skelett = false;      // die GTO hat ein Skeleton-Objekt (sonst ein starres Teil)
+    std::vector<std::string> actors;   // alle *.actor.xml, die auf das Modell zeigen
 };
 
 struct AnimEintrag {
     std::string pfad;
     std::string name;          // Dateiname ohne Endung
     std::string gruppe;        // Ordner unter Animation/, z.B. ingame/characters/maleAverage/clips
+    mutable int bilder = 0;    // Bildzahl (30 fps), bekannt nach Katalog::AnimCrcs
 };
 
 struct TexturSatz {
@@ -52,6 +54,14 @@ public:
     // Knochen-CRCs je Animation (nur die Spurtabellen, beim ersten Aufruf
     // einmal fuer alle gelesen). Grundlage fuer "passt zum Skelett".
     const std::vector<std::vector<uint32_t>>& AnimCrcs(const Pakete& p) const;
+
+    // Die Animationen, die das Spiel dieser Figur zuordnet (Indizes in
+    // animationen, ohne Skelettpruefung):
+    //  - AnimIDs aus den Chore-Sets ihrer Actors (zed_components_chore_resource,
+    //    Moveset-Resourcen, auch ueber mKeyBaseActor) und aus dem ChoreData-Ordner
+    //    mit ihrem Namen (DarthVader, Juno, ewok, Player ...);
+    //  - Zwischensequenz-Clips, deren Name auf die Figur endet (..._darthVader).
+    std::vector<size_t> EigeneAnimationen(const Pakete& p, const FigurEintrag& f, std::vector<std::string>* quellen = nullptr) const;
 
 private:
     mutable std::vector<std::vector<uint32_t>> animCrcs_;

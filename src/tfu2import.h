@@ -17,9 +17,10 @@
 #include <istdplug.h>
 
 #include <string>
+#include <vector>
 
-#define TFU2IMPORT_VERSION      100
-#define TFU2IMPORT_VERSION_STR  _T("0.1.0")
+#define TFU2IMPORT_VERSION      200
+#define TFU2IMPORT_VERSION_STR  _T("0.2.0")
 
 // Einmalig gezogen, nie wieder aendern.
 #define TFU2IMPORT_SCENE_CLASS_ID  Class_ID(0x4c1e7b93, 0x2a6f0d58)
@@ -47,14 +48,40 @@ struct ImportOptionen {
 // Figur importieren; bericht = Zusammenfassung fuer den Anwender.
 bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const ImportOptionen& o, std::wstring& bericht);
 
-// Clip auf das Skelett in der Szene legen (Auswahl, sonst das zuletzt importierte).
-bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, std::wstring& bericht);
+// Eine importierte Figur in der Szene (alle Knoten tragen dieselbe tfu2_id).
+struct SzenenFigur {
+    std::string id, gto, name;
+    size_t knochen = 0;
+};
+// Gewaehlte Figur zuerst, sonst die zuletzt importierte.
+std::vector<SzenenFigur> FigurenInSzene();
 
-// Knochen-CRCs der Figur in der Szene (sortiert; leer wenn keine) und ihr Name.
-std::vector<uint32_t> CrcsInSzene(std::string* figur = nullptr);
+// Eine Sequenz der Zeitleiste (aus der Notizspur der Szenenwurzel), in Bildern.
+struct Sequenz {
+    std::string name;
+    int start = 0, ende = 0;
+};
 
-// Das Fenster
+// Clip auf eine Figur legen. id leer = Auswahl, sonst die zuletzt importierte.
+bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, const std::string& id,
+                      std::wstring& bericht);
+
+// Viele Clips hintereinander in die Zeitleiste (Bindepose auf Bild 0, Abstand
+// in Bildern), mit Notizspur und Custom Attributes NeoDexSequenceData.
+bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, int abstand, bool notiz, bool wurzelBewegung,
+                  const std::string& id, std::vector<Sequenz>& plan, std::wstring& bericht);
+bool LiesSequenzen(std::vector<Sequenz>& aus);
+void ZeigeBereich(int startBild, int endeBild);
+
+// Knochen-CRCs einer Figur in der Szene (sortiert; leer wenn keine) und ihre GTO.
+std::vector<uint32_t> CrcsInSzene(const std::string& id = std::string(), std::string* figur = nullptr);
+
+// Farbe aus Max' Theme (GetCustSysColor) fuer die Fenster
+uint32_t ThemeFarbe(int welche);
+
+// Die Fenster (modal, wie beim SWBF2 Import)
 int OeffneFenster();
+int OeffneAnimFenster(HWND eltern = nullptr);
 
 // Datei -> Importieren: .lp oder SWTFU2.exe oeffnet das Fenster, .gto importiert eine lose Datei.
 int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen);

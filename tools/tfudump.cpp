@@ -193,9 +193,17 @@ int wmain(int argc, wchar_t** argv) {
         }
         size_t gleich = 0;
         for (size_t i = 0; i < k.animationen.size(); ++i) if (GleichesRig(*f, k.animationen[i]) && PasstZu(alle[i], sk)) ++gleich;
-        std::printf("CHARACTER %s  bones %zu  same rig %zu  fitting animations %zu of %zu  (%.2f s)\n", f->name.c_str(), sk.size(), gleich, n,
-                    alle.size(), s1);
+        const auto t2 = std::chrono::steady_clock::now();
+        std::vector<std::string> quellen;
+        const std::vector<size_t> eigene = k.EigeneAnimationen(p, *f, &quellen);
+        size_t eigenePassend = 0;
+        for (size_t i : eigene) if (PasstZu(alle[i], sk)) ++eigenePassend;
+        const double s2 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t2).count();
+        std::printf("CHARACTER %s  bones %zu  own %zu (fitting %zu, %zu chore files, %.2f s)  same rig %zu  fitting animations %zu of %zu  (%.2f s)\n",
+                    f->name.c_str(), sk.size(), eigene.size(), eigenePassend, quellen.size(), s2, gleich, n, alle.size(), s1);
         for (const auto& g : gruppen) std::printf("  %5zu  %s\n", g.second, g.first.c_str());
+        for (const std::string& q : quellen) std::printf("SOURCE %s\n", q.c_str());
+        for (const std::string& a : f->actors) std::printf("ACTOR %s\n", a.c_str());
         return 0;
     }
     if (befehl == "materials") {

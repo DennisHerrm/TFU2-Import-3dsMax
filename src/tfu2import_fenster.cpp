@@ -1,16 +1,21 @@
 // ============================================================
-//  TFU2 Import - das Fenster
+//  TFU2 Import - das Figurenfenster (modal)
 //
-//  Links die Figuren des Spiels, rechts die Animationen. Das Fenster
-//  ist nicht modal: Max bleibt bedienbar, man kann eine Animation
-//  anlegen und gleich in der Zeitleiste abspielen.
+//  Aufbau und Gestaltung wie beim SWBF2 Import: Spielordner oben,
+//  Statuszeile, Reiter nach Figurenart, Suche, selbst gezeichnete
+//  zweizeilige Liste, Detailzeile, Fusszeile mit den Knoepfen.
+//  Farben aus Max' Theme, Kontraste nach WCAG (tfu2_ui.h), dunkle
+//  Titelleiste. Das Fenster ist modal - Max' Tastenkuerzel greifen
+//  dann nicht in die Suche.
 // ============================================================
 #include "tfu2import.h"
 #include "tfu2import_res.h"
+#include "tfu2_ui.h"
 
 #include <shlobj.h>
-#include <windowsx.h>
+#include <shobjidl.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -20,260 +25,560 @@ namespace tfu2 {
 
 namespace {
 
-HWND g_fenster = nullptr;
-const tfu::Pakete* g_pakete = nullptr;
-const tfu::Katalog* g_katalog = nullptr;
+using tfu2ui::Mische;
 
-std::wstring Text(HWND d, int id) {
-    wchar_t b[1024] = {};
-    GetDlgItemTextW(d, id, b, 1024);
-    return b;
+constexpr int kKategorien = 5;
+const wchar_t* const kReiter[kKategorien] = { L"Starkiller", L"Characters", L"Creatures + droids", L"Other", L"All" };
+
+// Figurenart fuer die Reiter
+int Kategorie(const tfu::FigurEintrag& f) {
+    const std::string n = tfu::Klein(tfu::Blatt(f.ordner)), name = tfu::Klein(f.name), rig = tfu::Klein(f.rig);
+    if (n.compare(0, 6, "player") == 0 || name.compare(0, 6, "player") == 0) return 0;
+    if (rig == "maleaverage" || rig == "femaleaverage" || rig == "malebrute" || rig == "maledwarf") return 1;
+    if (rig == "giant" || rig == "gorillaboss" || rig == "terrorgiant" || rig == "titandroid" || rig == "titanspawn" ||
+        rig == "astromech" || rig == "unique")
+        return 2;
+    return 3;
 }
 
-void Status(HWND d, const std::wstring& t) { SetDlgItemTextW(d, IDC_STATUS, t.c_str()); }
+enum : unsigned { kL = 1, kO = 2, kR = 4, kU = 8 };   // Anker: links, oben, rechts, unten
+struct Anker {
+    int id;
+    RECT start;
+    unsigned flags;
+};
 
-bool Passt(const std::string& klein, const std::string& filter) {
-    if (filter.empty()) return true;
-    // Mehrere Woerter: alle muessen vorkommen.
-    size_t p = 0;
-    while (p < filter.size()) {
-        size_t e = filter.find(' ', p);
-        if (e == std::string::npos) e = filter.size();
-        const std::string wort = filter.substr(p, e - p);
-        if (!wort.empty() && klein.find(wort) == std::string::npos) return false;
-        p = e + 1;
-    }
-    return true;
+struct Fenster {
+    HWND h = nullptr;
+    tfu2ui::Palette pal;
+    HFONT fontNormal = nullptr, fontFett = nullptr;
+    int zeilenHoehe = 16;
+    const tfu::Pakete* pakete = nullptr;
+    const tfu::Katalog* katalog = nullptr;
+    std::wstring ordner;
+    std::vector<size_t> sichtbar;
+    size_t anzahl[kKategorien] = {};
+    int kategorie = 0;
+    bool statisch = false;
+    bool importiert = false;
+    std::wstring status;
+    bool statusFehler = false;
+    std::vector<Anker> anker;
+    SIZE startClient{ 0, 0 }, startFenster{ 0, 0 };
+};
+
+Fenster* Zustand(HWND h) { return reinterpret_cast<Fenster*>(GetWindowLongPtrW(h, GWLP_USERDATA)); }
+
+void Status(Fenster& f, const std::wstring& t, bool fehler = false) {
+    f.status = t;
+    f.statusFehler = fehler;
+    InvalidateRect(GetDlgItem(f.h, IDC_STATUS), nullptr, FALSE);
+    UpdateWindow(GetDlgItem(f.h, IDC_STATUS));
 }
 
-// Die Figur, zu der die Animationen passen sollen: die in der Szene (Auswahl
-// oder zuletzt importiert), sonst die links gewaehlte (deren GTO wird dafuer
-// kurz gelesen). Liefert ihren Katalogeintrag (oder nullptr) und ihr Skelett.
-const tfu::FigurEintrag* ZielFigur(HWND d, std::vector<uint32_t>& skelett) {
-    if (g_katalog == nullptr) return nullptr;
-    std::string gto;
-    skelett = CrcsInSzene(&gto);
-    if (!skelett.empty()) {
-        const std::string k = tfu::Klein(gto);
-        for (const tfu::FigurEintrag& f : g_katalog->figuren) if (tfu::Klein(f.gto) == k) return &f;
-        return nullptr;   // lose .gto: nur Skelett-Abgleich moeglich
-    }
-    static size_t gemerkt = static_cast<size_t>(-1);
-    static std::vector<uint32_t> gemerktCrcs;
-    HWND l = GetDlgItem(d, IDC_FIGUREN);
-    const int sel = ListBox_GetCurSel(l);
-    if (sel < 0) return nullptr;
-    const size_t i = static_cast<size_t>(ListBox_GetItemData(l, sel));
-    if (i >= g_katalog->figuren.size()) return nullptr;
-    if (i != gemerkt) {
-        gemerktCrcs = tfu::ModellCrcs(*g_pakete, g_katalog->figuren[i].gto);
-        gemerkt = i;
-    }
-    skelett = gemerktCrcs;
-    return &g_katalog->figuren[i];
+// ------------------------------------------------------------
+//  Spielordner
+// ------------------------------------------------------------
+bool IstSpielordner(const std::wstring& o) {
+    if (o.empty()) return false;
+    const DWORD a = GetFileAttributesW((o + L"\\LevelPacks\\pak0.lp").c_str());
+    return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-void FuelleFiguren(HWND d) {
-    HWND l = GetDlgItem(d, IDC_FIGUREN);
-    SendMessageW(l, WM_SETREDRAW, FALSE, 0);
-    ListBox_ResetContent(l);
-    size_t zahl = 0;
-    if (g_katalog != nullptr) {
-        const std::string filter = tfu::Klein(tfu::Utf8(Text(d, IDC_FFILTER)));
-        const bool statisch = IsDlgButtonChecked(d, IDC_STATISCH) == BST_CHECKED;
-        for (size_t i = 0; i < g_katalog->figuren.size(); ++i) {
-            const tfu::FigurEintrag& f = g_katalog->figuren[i];
-            if (!f.skelett && !statisch) continue;
-            if (!Passt(tfu::Klein(f.gto), filter)) continue;
-            const std::wstring z = tfu::Breit(f.name + "   (" + f.rig + ")");
-            const int pos = ListBox_AddString(l, z.c_str());
-            ListBox_SetItemData(l, pos, static_cast<LPARAM>(i));
-            ++zahl;
+std::wstring Registrywert(HKEY wurzel, const wchar_t* schluessel, const wchar_t* name) {
+    wchar_t puffer[MAX_PATH] = {};
+    DWORD groesse = sizeof puffer;
+    if (RegGetValueW(wurzel, schluessel, name, RRF_RT_REG_SZ, nullptr, puffer, &groesse) != ERROR_SUCCESS) return std::wstring();
+    return puffer;
+}
+
+// Steam-Bibliotheken nach dem Spiel absuchen (Standardordner, libraryfolders.vdf).
+std::wstring SucheSpiel() {
+    std::vector<std::wstring> steam;
+    for (const std::wstring& s : { Registrywert(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", L"SteamPath"),
+                                   Registrywert(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WOW6432Node\\Valve\\Steam", L"InstallPath") })
+        if (!s.empty()) steam.push_back(s);
+    steam.push_back(L"C:\\Program Files (x86)\\Steam");
+    const std::wstring spiel = L"\\steamapps\\common\\Star Wars The Force Unleashed 2";
+    for (const std::wstring& s : steam) {
+        std::wstring o = s;
+        std::replace(o.begin(), o.end(), L'/', L'\\');
+        if (IstSpielordner(o + spiel)) return o + spiel;
+        // weitere Bibliotheken: "path"  "D:\\SteamLibrary"
+        FILE* vdf = _wfopen((o + L"\\steamapps\\libraryfolders.vdf").c_str(), L"rb");
+        if (vdf == nullptr) continue;
+        std::string t;
+        char b[4096];
+        size_t n;
+        while ((n = std::fread(b, 1, sizeof b, vdf)) > 0) t.append(b, n);
+        std::fclose(vdf);
+        size_t p = 0;
+        while ((p = t.find("\"path\"", p)) != std::string::npos) {
+            const size_t a = t.find('"', p + 6), e = (a == std::string::npos) ? a : t.find('"', a + 1);
+            if (a == std::string::npos || e == std::string::npos) break;
+            std::string pfad = t.substr(a + 1, e - a - 1);
+            std::string sauber;
+            for (size_t i = 0; i < pfad.size(); ++i) {
+                if (pfad[i] == '\\' && i + 1 < pfad.size() && pfad[i + 1] == '\\') ++i;
+                sauber += pfad[i];
+            }
+            const std::wstring kand = tfu::Breit(sauber) + spiel;
+            if (IstSpielordner(kand)) return kand;
+            p = e + 1;
         }
     }
-    SendMessageW(l, WM_SETREDRAW, TRUE, 0);
-    InvalidateRect(l, nullptr, TRUE);
-    SetDlgItemTextW(d, IDC_FZAHL, (std::to_wstring(zahl) + L" characters").c_str());
+    return std::wstring();
 }
 
-void FuelleAnims(HWND d) {
-    HWND l = GetDlgItem(d, IDC_ANIMS);
-    SendMessageW(l, WM_SETREDRAW, FALSE, 0);
-    ListBox_ResetContent(l);
-    size_t zahl = 0;
-    std::wstring rigText;
-    if (g_katalog != nullptr) {
-        const std::string filter = tfu::Klein(tfu::Utf8(Text(d, IDC_AFILTER)));
-        // 0 = gleiches Rig (Ordner), 1 = passt zum Skelett, 2 = alle
-        int art = static_cast<int>(SendDlgItemMessageW(d, IDC_AART, CB_GETCURSEL, 0, 0));
-        std::vector<uint32_t> skelett;
-        const tfu::FigurEintrag* figur = (art == 2) ? nullptr : ZielFigur(d, skelett);
-        const std::vector<std::vector<uint32_t>>* clipCrcs = nullptr;
-        if (art != 2 && skelett.empty()) {
-            art = 2;
-            rigText = L"  (pick a character to filter)";
-        }
-        if (art != 2) {
-            HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
-            clipCrcs = &g_katalog->AnimCrcs(*g_pakete);
-            SetCursor(alt);
-        }
-        auto passt = [&](size_t i) { return i < clipCrcs->size() && tfu::PasstZu((*clipCrcs)[i], skelett); };
-        if (art == 0) {
-            // Ordner des Rigs/der Figur UND passendes Skelett. Ohne eigenen
-            // Ordner (Yoda, Terror-Giant ...) Rueckfall auf den Skelett-Abgleich.
-            bool eigene = false;
-            if (figur != nullptr)
-                for (size_t i = 0; i < g_katalog->animationen.size() && !eigene; ++i)
-                    eigene = tfu::GleichesRig(*figur, g_katalog->animationen[i]) && passt(i);
-            if (!eigene) art = 1;
-            else rigText = L"  rig of " + tfu::Breit(figur->name);
-        }
-        if (art == 1) rigText = L"  fitting the skeleton";
-        for (size_t i = 0; i < g_katalog->animationen.size(); ++i) {
-            const tfu::AnimEintrag& a = g_katalog->animationen[i];
-            const std::string k = tfu::Klein(a.pfad);
-            if (art == 0 && !(tfu::GleichesRig(*figur, a) && passt(i))) continue;
-            if (art == 1 && !passt(i)) continue;
-            if (!Passt(k, filter)) continue;
-            const std::wstring z = tfu::Breit(a.name + "   [" + a.gruppe + "]");
-            const int pos = ListBox_AddString(l, z.c_str());
-            ListBox_SetItemData(l, pos, static_cast<LPARAM>(i));
-            ++zahl;
-        }
-    }
-    SendMessageW(l, WM_SETREDRAW, TRUE, 0);
-    InvalidateRect(l, nullptr, TRUE);
-    SetDlgItemTextW(d, IDC_AZAHL, (std::to_wstring(zahl) + L" animations" + rigText).c_str());
-}
-
-void Lade(HWND d) {
-    std::string fehler;
-    HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    const bool ok = Spiel(Text(d, IDC_ORDNER), g_pakete, g_katalog, fehler);
-    SetCursor(alt);
-    if (!ok) {
-        g_pakete = nullptr;
-        g_katalog = nullptr;
-        Status(d, L"Could not load the game: " + tfu::Breit(fehler));
-    } else {
-        SetDlgItemTextW(d, IDC_ORDNER, g_pakete->Ordner().c_str());
-        Status(d, L"Game loaded: " + std::to_wstring(g_pakete->Eintraege().size()) + L" files in " +
-                      std::to_wstring(g_pakete->PaketZahl()) + L" packs, " + std::to_wstring(g_katalog->figuren.size()) +
-                      L" characters, " + std::to_wstring(g_katalog->animationen.size()) + L" animations.");
-    }
-    FuelleFiguren(d);
-    FuelleAnims(d);
-}
-
-void Durchsuchen(HWND d) {
+bool WaehleOrdner(HWND besitzer, std::wstring& ordner) {
+#ifndef __IFileOpenDialog_INTERFACE_DEFINED__
+    // Das SDK von Max 2016 stellt eine Windows-Version vor Vista ein - dann gibt
+    // es IFileOpenDialog nicht, und der klassische Ordnerdialog tut es.
     BROWSEINFOW bi = {};
-    bi.hwndOwner = d;
-    bi.lpszTitle = L"Select the Star Wars The Force Unleashed 2 folder (the one with SWTFU2.exe)";
+    bi.hwndOwner = besitzer;
+    bi.lpszTitle = L"Star Wars The Force Unleashed 2 - the folder with SWTFU2.exe and LevelPacks";
     bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
     LPITEMIDLIST id = SHBrowseForFolderW(&bi);
-    if (id == nullptr) return;
+    if (id == nullptr) return false;
     wchar_t pfad[MAX_PATH] = {};
-    if (SHGetPathFromIDListW(id, pfad)) {
-        SetDlgItemTextW(d, IDC_ORDNER, pfad);
-        Lade(d);
-    }
+    const bool ok = SHGetPathFromIDListW(id, pfad) != FALSE;
     CoTaskMemFree(id);
-}
-
-void Importiere(HWND d) {
-    if (g_katalog == nullptr) { Status(d, L"Load the game first."); return; }
-    HWND l = GetDlgItem(d, IDC_FIGUREN);
-    const int sel = ListBox_GetCurSel(l);
-    if (sel < 0) { Status(d, L"Pick a character on the left."); return; }
-    const size_t i = static_cast<size_t>(ListBox_GetItemData(l, sel));
-    if (i >= g_katalog->figuren.size()) return;
-    ImportOptionen o;
-    o.texturen = IsDlgButtonChecked(d, IDC_TEXTUREN) == BST_CHECKED;
-    SchreibeEinstellung(L"Texturen", o.texturen ? L"1" : L"0");
-    Status(d, L"Importing " + tfu::Breit(g_katalog->figuren[i].name) + L" ...");
-    UpdateWindow(d);
-    HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    std::wstring bericht;
-    const bool ok = ImportiereFigur(*g_pakete, g_katalog->figuren[i], o, bericht);
-    SetCursor(alt);
-    Status(d, (ok ? L"Imported " : L"Import failed: ") + bericht);
-    FuelleAnims(d);
-}
-
-void WendeAn(HWND d) {
-    if (g_katalog == nullptr) { Status(d, L"Load the game first."); return; }
-    HWND l = GetDlgItem(d, IDC_ANIMS);
-    const int sel = ListBox_GetCurSel(l);
-    if (sel < 0) { Status(d, L"Pick an animation on the right."); return; }
-    const size_t i = static_cast<size_t>(ListBox_GetItemData(l, sel));
-    if (i >= g_katalog->animationen.size()) return;
-    const bool wurzel = IsDlgButtonChecked(d, IDC_WURZEL) == BST_CHECKED;
-    SchreibeEinstellung(L"Wurzelbewegung", wurzel ? L"1" : L"0");
-    HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    std::wstring bericht;
-    const bool ok = WendeAnimationAn(*g_pakete, g_katalog->animationen[i].pfad, wurzel, bericht);
-    SetCursor(alt);
-    Status(d, (ok ? L"Animation: " : L"") + bericht);
-}
-
-INT_PTR CALLBACK DlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp) {
-    switch (msg) {
-    case WM_INITDIALOG: {
-        g_fenster = d;
-        GetCOREInterface()->RegisterDlgWnd(d);
-        SetDlgItemTextW(d, IDC_ORDNER, LiesEinstellung(L"Spielordner").c_str());
-        const std::wstring tex = LiesEinstellung(L"Texturen"), wurz = LiesEinstellung(L"Wurzelbewegung");
-        CheckDlgButton(d, IDC_TEXTUREN, tex == L"0" ? BST_UNCHECKED : BST_CHECKED);
-        CheckDlgButton(d, IDC_WURZEL, wurz == L"0" ? BST_UNCHECKED : BST_CHECKED);
-        {
-            HWND c = GetDlgItem(d, IDC_AART);
-            SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Same rig"));
-            SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Fits skeleton"));
-            SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"All"));
-            const std::wstring art = LiesEinstellung(L"AnimFilter");
-            SendMessageW(c, CB_SETCURSEL, (art == L"1") ? 1 : (art == L"2") ? 2 : 0, 0);
+    if (ok) ordner = pfad;
+    return ok;
+#else
+    IFileOpenDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return false;
+    DWORD opt = 0;
+    dlg->GetOptions(&opt);
+    dlg->SetOptions(opt | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+    dlg->SetTitle(L"Star Wars The Force Unleashed 2 - the folder with SWTFU2.exe and LevelPacks");
+    bool ok = false;
+    if (SUCCEEDED(dlg->Show(besitzer))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item))) {
+            PWSTR pfad = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pfad))) {
+                ordner = pfad;
+                CoTaskMemFree(pfad);
+                ok = true;
+            }
+            item->Release();
         }
-        if (!Text(d, IDC_ORDNER).empty()) Lade(d);
-        else Status(d, L"Pick the game folder (the one with SWTFU2.exe and LevelPacks).");
-        (void)lp;
+    }
+    dlg->Release();
+    return ok;
+#endif
+}
+
+// ------------------------------------------------------------
+//  Masse und Anordnung (mitwachsendes Fenster)
+// ------------------------------------------------------------
+int EintragsHoehe(HWND h) {
+    const int z = tfu2ui::ZeilenHoehe(h);
+    return 2 * z + std::max(4, z / 3) + 2;
+}
+
+void MerkeAnker(Fenster& f) {
+    struct { int id; unsigned fl; } const liste[] = {
+        { IDC_ORDNER_LABEL, kL | kO }, { IDC_ORDNER, kL | kO | kR }, { IDC_DURCHSUCHEN, kO | kR }, { IDC_STATUS, kL | kO | kR },
+        { IDC_TAB0, kL | kO }, { IDC_TAB0 + 1, kL | kO }, { IDC_TAB0 + 2, kL | kO }, { IDC_TAB0 + 3, kL | kO }, { IDC_TAB0 + 4, kL | kO },
+        { IDC_STATISCH, kO | kR }, { IDC_SUCHE_LABEL, kL | kO }, { IDC_SUCHE, kL | kO | kR }, { IDC_ANZAHL, kO | kR },
+        { IDC_LISTE, kL | kO | kR | kU }, { IDC_DETAIL, kL | kR | kU }, { IDC_FUSS, kL | kR | kU },
+        { IDC_ANIMFENSTER, kR | kU }, { IDOK, kR | kU }, { IDCANCEL, kR | kU },
+    };
+    RECT c{};
+    GetClientRect(f.h, &c);
+    f.startClient = { c.right - c.left, c.bottom - c.top };
+    RECT w{};
+    GetWindowRect(f.h, &w);
+    f.startFenster = { w.right - w.left, w.bottom - w.top };
+    for (const auto& e : liste) {
+        HWND h = GetDlgItem(f.h, e.id);
+        if (h == nullptr) continue;
+        RECT r{};
+        GetWindowRect(h, &r);
+        MapWindowPoints(nullptr, f.h, reinterpret_cast<POINT*>(&r), 2);
+        f.anker.push_back({ e.id, r, e.fl });
+    }
+}
+
+void Ordne(Fenster& f, int cx, int cy) {
+    if (f.anker.empty()) return;
+    const int dx = cx - f.startClient.cx, dy = cy - f.startClient.cy;
+    HDWP h = BeginDeferWindowPos(static_cast<int>(f.anker.size()));
+    for (const Anker& a : f.anker) {
+        RECT n = a.start;
+        if (a.flags & kR) { if (a.flags & kL) n.right += dx; else { n.left += dx; n.right += dx; } }
+        if (a.flags & kU) { if (a.flags & kO) n.bottom += dy; else { n.top += dy; n.bottom += dy; } }
+        HWND c = GetDlgItem(f.h, a.id);
+        if (h != nullptr && c != nullptr)
+            h = DeferWindowPos(h, c, nullptr, n.left, n.top, n.right - n.left, n.bottom - n.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (h != nullptr) EndDeferWindowPos(h);
+    InvalidateRect(f.h, nullptr, TRUE);
+}
+
+// ------------------------------------------------------------
+//  Zeichnen
+// ------------------------------------------------------------
+void ZeichneEintrag(const Fenster& f, const DRAWITEMSTRUCT& d) {
+    HDC dc = d.hDC;
+    const RECT r = d.rcItem;
+    const bool sel = (d.itemState & ODS_SELECTED) != 0;
+    HBRUSH hg = CreateSolidBrush(sel ? f.pal.auswahl : f.pal.feld);
+    FillRect(dc, &r, hg);
+    DeleteObject(hg);
+    if (f.katalog == nullptr || d.itemID == static_cast<UINT>(-1) || d.itemID >= f.sichtbar.size()) return;
+    const tfu::FigurEintrag& fi = f.katalog->figuren[f.sichtbar[d.itemID]];
+    const int rand = std::max(4, f.zeilenHoehe / 3);
+    const RECT z1 = { r.left + rand, r.top + rand / 2, r.right - rand, r.top + rand / 2 + f.zeilenHoehe };
+    const RECT z2 = { z1.left, z1.bottom, z1.right, z1.bottom + f.zeilenHoehe };
+    SetBkMode(dc, TRANSPARENT);
+    HGDIOBJ altF = SelectObject(dc, f.fontNormal);
+
+    // Rechts in Zeile 1: Rig und Herkunft, gedaempft.
+    const bool dlc = tfu::Klein(fi.gto).find("game/dlc/") == 0;
+    std::wstring meta = tfu::Breit(fi.rig);
+    if (!fi.skelett) meta += L"  \u00B7  static";
+    if (dlc) meta += L"  \u00B7  DLC";
+    RECT mess = z1;
+    DrawTextW(dc, meta.c_str(), -1, &mess, DT_SINGLELINE | DT_NOPREFIX | DT_CALCRECT);
+    const int mbreite = static_cast<int>(mess.right - mess.left);
+    RECT mz = { z1.right - mbreite, z1.top, z1.right, z1.bottom };
+    SetTextColor(dc, sel ? f.pal.auswahlDim : f.pal.feldDim);
+    DrawTextW(dc, meta.c_str(), -1, &mz, DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    // Links in Zeile 1: der Name, halbfett.
+    RECT nz = z1;
+    nz.right = mz.left - 2 * rand;
+    SelectObject(dc, f.fontFett != nullptr ? f.fontFett : f.fontNormal);
+    SetTextColor(dc, sel ? f.pal.auswahlText : f.pal.feldText);
+    const std::wstring name = tfu::Breit(fi.name);
+    DrawTextW(dc, name.c_str(), -1, &nz, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+
+    // Zeile 2: wo die Figur im Spiel liegt (und ob sie einen Actor hat).
+    SelectObject(dc, f.fontNormal);
+    std::string ort = fi.ordner;
+    const size_t c = tfu::Klein(ort).find("characters/");
+    if (c != std::string::npos) ort = ort.substr(c + 11);
+    std::wstring unter = tfu::Breit(ort);
+    if (!fi.actor.empty()) unter += L"  \u00B7  " + tfu::Breit(tfu::Blatt(fi.actor));
+    RECT uz = z2;
+    SetTextColor(dc, sel ? f.pal.auswahlDim : f.pal.feldDim);
+    DrawTextW(dc, unter.c_str(), -1, &uz, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+    SelectObject(dc, altF);
+    if (!sel) tfu2ui::Trennlinie(f.pal, dc, r, rand);
+    if ((d.itemState & ODS_FOCUS) != 0 && (d.itemState & ODS_NOFOCUSRECT) == 0) {
+        RECT fr = r;
+        DrawFocusRect(dc, &fr);
+    }
+}
+
+// ------------------------------------------------------------
+//  Liste und Anzeige
+// ------------------------------------------------------------
+int Auswahl(const Fenster& f) {
+    const LRESULT s = SendDlgItemMessageW(f.h, IDC_LISTE, LB_GETCURSEL, 0, 0);
+    if (s == LB_ERR || s < 0 || static_cast<size_t>(s) >= f.sichtbar.size()) return -1;
+    return static_cast<int>(s);
+}
+
+void Bedienbarkeit(Fenster& f) {
+    const bool liste = f.katalog != nullptr;
+    for (int k = 0; k < kKategorien; ++k) EnableWindow(GetDlgItem(f.h, IDC_TAB0 + k), liste);
+    EnableWindow(GetDlgItem(f.h, IDC_STATISCH), liste);
+    EnableWindow(GetDlgItem(f.h, IDC_SUCHE), liste);
+    EnableWindow(GetDlgItem(f.h, IDC_LISTE), liste);
+    EnableWindow(GetDlgItem(f.h, IDOK), liste && Auswahl(f) >= 0);
+    EnableWindow(GetDlgItem(f.h, IDC_ANIMFENSTER), liste);
+    InvalidateRect(GetDlgItem(f.h, IDOK), nullptr, FALSE);
+}
+
+void ZeigeDetail(Fenster& f) {
+    const int sel = Auswahl(f);
+    std::wstring t;
+    if (sel >= 0) t = tfu::Breit(f.katalog->figuren[f.sichtbar[static_cast<size_t>(sel)]].gto);
+    else if (!f.sichtbar.empty()) t = L"Double-click a character or select it and press Import.";
+    else if (f.katalog != nullptr) t = L"Nothing matches - try another tab or a shorter search.";
+    SetDlgItemTextW(f.h, IDC_DETAIL, t.c_str());
+}
+
+std::vector<std::string> Suchwoerter(HWND h, int id) {
+    wchar_t puffer[512] = {};
+    GetDlgItemTextW(h, id, puffer, 512);
+    const std::string s = tfu::Klein(tfu::Utf8(puffer));
+    std::vector<std::string> woerter;
+    std::string wort;
+    for (char c : s) {
+        if (c == ' ' || c == '\t') { if (!wort.empty()) { woerter.push_back(wort); wort.clear(); } }
+        else wort += c;
+    }
+    if (!wort.empty()) woerter.push_back(wort);
+    return woerter;
+}
+
+void FuelleListe(Fenster& f) {
+    HWND lb = GetDlgItem(f.h, IDC_LISTE);
+    std::string vorher;
+    const int alt = Auswahl(f);
+    if (alt >= 0) vorher = f.katalog->figuren[f.sichtbar[static_cast<size_t>(alt)]].gto;
+    const std::vector<std::string> woerter = Suchwoerter(f.h, IDC_SUCHE);
+    f.sichtbar.clear();
+    std::fill(std::begin(f.anzahl), std::end(f.anzahl), size_t(0));
+    if (f.katalog != nullptr) {
+        for (size_t i = 0; i < f.katalog->figuren.size(); ++i) {
+            const tfu::FigurEintrag& fi = f.katalog->figuren[i];
+            if (!fi.skelett && !f.statisch) continue;
+            const int art = Kategorie(fi);
+            ++f.anzahl[art];
+            ++f.anzahl[kKategorien - 1];
+            if (f.kategorie < kKategorien - 1 && art != f.kategorie) continue;
+            const std::string k = tfu::Klein(fi.gto);
+            bool alle = true;
+            for (const std::string& w : woerter) if (k.find(w) == std::string::npos) { alle = false; break; }
+            if (alle) f.sichtbar.push_back(i);
+        }
+    }
+    for (int k = 0; k < kKategorien; ++k) {
+        std::wstring t = kReiter[k];
+        if (f.katalog != nullptr) t += L"  " + std::to_wstring(f.anzahl[k]);
+        SetDlgItemTextW(f.h, IDC_TAB0 + k, t.c_str());
+        InvalidateRect(GetDlgItem(f.h, IDC_TAB0 + k), nullptr, FALSE);
+    }
+    InvalidateRect(GetDlgItem(f.h, IDC_STATISCH), nullptr, FALSE);
+    SendMessageW(lb, WM_SETREDRAW, FALSE, 0);
+    SendMessageW(lb, LB_SETCOUNT, static_cast<WPARAM>(f.sichtbar.size()), 0);
+    int neu = -1;
+    if (!vorher.empty())
+        for (size_t j = 0; j < f.sichtbar.size(); ++j)
+            if (f.katalog->figuren[f.sichtbar[j]].gto == vorher) { neu = static_cast<int>(j); break; }
+    SendMessageW(lb, LB_SETCURSEL, static_cast<WPARAM>(neu), 0);
+    SendMessageW(lb, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(lb, nullptr, TRUE);
+    std::wstring z;
+    if (f.katalog != nullptr) z = std::to_wstring(f.sichtbar.size()) + L" of " + std::to_wstring(f.anzahl[f.kategorie]);
+    SetDlgItemTextW(f.h, IDC_ANZAHL, z.c_str());
+    ZeigeDetail(f);
+    Bedienbarkeit(f);
+}
+
+void Lade(Fenster& f) {
+    SetDlgItemTextW(f.h, IDC_ORDNER, f.ordner.empty() ? L"(not found - choose it with Browse)" : f.ordner.c_str());
+    if (!IstSpielordner(f.ordner)) {
+        f.pakete = nullptr;
+        f.katalog = nullptr;
+        Status(f, L"Choose the game folder (the one with SWTFU2.exe and LevelPacks).", !f.ordner.empty());
+        FuelleListe(f);
+        return;
+    }
+    Status(f, L"Reading the game packs\u2026");
+    HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
+    std::string fehler;
+    const bool ok = Spiel(f.ordner, f.pakete, f.katalog, fehler);
+    SetCursor(alt);
+    if (!ok) {
+        f.pakete = nullptr;
+        f.katalog = nullptr;
+        Status(f, L"Could not read the game: " + tfu::Breit(fehler), true);
+    } else {
+        size_t mitSkelett = 0;
+        for (const tfu::FigurEintrag& fi : f.katalog->figuren) if (fi.skelett) ++mitSkelett;
+        Status(f, std::to_wstring(mitSkelett) + L" characters with a skeleton, " + std::to_wstring(f.katalog->figuren.size()) +
+                      L" models, " + std::to_wstring(f.katalog->animationen.size()) + L" animations in " +
+                      std::to_wstring(f.pakete->PaketZahl()) + L" packs.");
+        SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR + L"  \u00B7  " +
+                                        std::to_wstring(f.katalog->figuren.size()) + L" models").c_str());
+    }
+    FuelleListe(f);
+}
+
+void Importiere(Fenster& f) {
+    const int sel = Auswahl(f);
+    if (sel < 0 || f.katalog == nullptr || f.pakete == nullptr) return;
+    const tfu::FigurEintrag& fi = f.katalog->figuren[f.sichtbar[static_cast<size_t>(sel)]];
+    Status(f, L"Importing " + tfu::Breit(fi.name) + L" (skeleton, meshes, skin, textures)\u2026");
+    HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
+    std::wstring bericht;
+    ImportOptionen o;
+    const bool ok = ImportiereFigur(*f.pakete, fi, o, bericht);
+    SetCursor(alt);
+    if (ok) f.importiert = true;
+    Status(f, (ok ? L"Imported " : L"Import failed: ") + bericht, !ok);
+}
+
+void Einrichten(Fenster& f) {
+    f.pal.Baue(&ThemeFarbe);
+    f.fontNormal = reinterpret_cast<HFONT>(SendMessageW(f.h, WM_GETFONT, 0, 0));
+    LOGFONTW lf{};
+    if (f.fontNormal != nullptr && GetObjectW(f.fontNormal, sizeof(lf), &lf) == sizeof(lf)) {
+        lf.lfWeight = FW_SEMIBOLD;
+        f.fontFett = CreateFontIndirectW(&lf);
+    }
+    f.zeilenHoehe = tfu2ui::ZeilenHoehe(f.h);
+    SendDlgItemMessageW(f.h, IDC_LISTE, LB_SETITEMHEIGHT, 0, EintragsHoehe(f.h));
+    tfu2ui::DunkleTitelleiste(f.h, f.pal.dunkel);
+    if (f.pal.dunkel) SetWindowTheme(GetDlgItem(f.h, IDC_LISTE), L"DarkMode_Explorer", nullptr);
+    SetWindowTextW(f.h, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR).c_str());
+    {
+        const int innen = std::max(3, f.zeilenHoehe / 4);
+        SendDlgItemMessageW(f.h, IDC_SUCHE, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(innen, innen));
+    }
+    SendDlgItemMessageW(f.h, IDC_SUCHE, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Filter by name, e.g.  vader  or  kota"));
+    SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR).c_str());
+    MerkeAnker(f);
+    f.kategorie = std::clamp(_wtoi(LiesEinstellung(L"Kategorie").c_str()), 0, kKategorien - 1);
+    f.statisch = LiesEinstellung(L"StatischeTeile") == L"1";
+    f.ordner = LiesEinstellung(L"Spielordner");
+    if (!IstSpielordner(f.ordner)) {
+        const std::wstring gefunden = SucheSpiel();
+        if (!gefunden.empty()) f.ordner = gefunden;
+    }
+    Lade(f);
+    SetFocus(GetDlgItem(f.h, f.katalog != nullptr ? IDC_SUCHE : IDC_DURCHSUCHEN));
+}
+
+INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_INITDIALOG) {
+        Fenster* neu = reinterpret_cast<Fenster*>(lp);
+        SetWindowLongPtrW(h, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(neu));
+        neu->h = h;
+        Einrichten(*neu);
+        return FALSE;
+    }
+    if (msg == WM_MEASUREITEM) {
+        MEASUREITEMSTRUCT* mi = reinterpret_cast<MEASUREITEMSTRUCT*>(lp);
+        if (mi != nullptr && mi->CtlID == IDC_LISTE) { mi->itemHeight = static_cast<UINT>(EintragsHoehe(h)); return TRUE; }
+        return FALSE;
+    }
+    Fenster* f = Zustand(h);
+    if (f == nullptr) return FALSE;
+    switch (msg) {
+    case WM_CTLCOLORDLG:
+        return reinterpret_cast<INT_PTR>(f->pal.pinselGrund);
+    case WM_CTLCOLORSTATIC: {
+        HDC dc = reinterpret_cast<HDC>(wp);
+        const int id = GetDlgCtrlID(reinterpret_cast<HWND>(lp));
+        const bool leise = id == IDC_ORDNER_LABEL || id == IDC_SUCHE_LABEL || id == IDC_DETAIL || id == IDC_FUSS || id == IDC_ANZAHL;
+        SetBkColor(dc, f->pal.grund);
+        SetTextColor(dc, leise ? f->pal.dim : f->pal.text);
+        return reinterpret_cast<INT_PTR>(f->pal.pinselGrund);
+    }
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX: {
+        HDC dc = reinterpret_cast<HDC>(wp);
+        SetBkColor(dc, f->pal.feld);
+        SetTextColor(dc, f->pal.feldText);
+        return reinterpret_cast<INT_PTR>(f->pal.pinselFeld);
+    }
+    case WM_DRAWITEM: {
+        const DRAWITEMSTRUCT* d = reinterpret_cast<const DRAWITEMSTRUCT*>(lp);
+        if (d == nullptr) return FALSE;
+        if (d->CtlType == ODT_LISTBOX) ZeichneEintrag(*f, *d);
+        else if (d->CtlType == ODT_STATIC) tfu2ui::ZeichneStatus(f->pal, f->fontNormal, *d, f->status, f->statusFehler);
+        else if (d->CtlType == ODT_BUTTON) {
+            const int id = static_cast<int>(d->CtlID);
+            const bool betont = (id >= IDC_TAB0 && id < IDC_TAB0 + kKategorien && id - IDC_TAB0 == f->kategorie) ||
+                                (id == IDC_STATISCH && f->statisch) || id == IDOK;
+            tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, betont);
+        }
         return TRUE;
     }
-    case WM_COMMAND:
-        switch (LOWORD(wp)) {
-        case IDC_DURCHSUCHEN: Durchsuchen(d); return TRUE;
-        case IDC_LADEN: Lade(d); return TRUE;
-        case IDC_IMPORT: Importiere(d); return TRUE;
-        case IDC_ANWENDEN: WendeAn(d); return TRUE;
-        case IDC_AART:
-            if (HIWORD(wp) == CBN_SELCHANGE) {
-                SchreibeEinstellung(L"AnimFilter", std::to_wstring(SendDlgItemMessageW(d, IDC_AART, CB_GETCURSEL, 0, 0)));
-                FuelleAnims(d);
+    case WM_SIZE:
+        Ordne(*f, LOWORD(lp), HIWORD(lp));
+        return TRUE;
+    case WM_PAINT: {
+        PAINTSTRUCT ps{};
+        HDC dc = BeginPaint(h, &ps);
+        for (int id : { IDC_SUCHE, IDC_LISTE }) tfu2ui::Kante(h, dc, id, f->pal.linie);
+        EndPaint(h, &ps);
+        return TRUE;
+    }
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* mm = reinterpret_cast<MINMAXINFO*>(lp);
+        if (mm != nullptr && f->startFenster.cx > 0) { mm->ptMinTrackSize.x = f->startFenster.cx; mm->ptMinTrackSize.y = f->startFenster.cy; }
+        return TRUE;
+    }
+    case WM_COMMAND: {
+        const int id = LOWORD(wp), code = HIWORD(wp);
+        if (id >= IDC_TAB0 && id < IDC_TAB0 + kKategorien) {
+            if (code == BN_CLICKED) {
+                f->kategorie = id - IDC_TAB0;
+                SchreibeEinstellung(L"Kategorie", std::to_wstring(f->kategorie));
+                FuelleListe(*f);
             }
             return TRUE;
-        case IDC_STATISCH: FuelleFiguren(d); return TRUE;
-        case IDC_FFILTER: if (HIWORD(wp) == EN_CHANGE) FuelleFiguren(d); return TRUE;
-        case IDC_AFILTER: if (HIWORD(wp) == EN_CHANGE) FuelleAnims(d); return TRUE;
-        case IDC_FIGUREN:
-            if (HIWORD(wp) == LBN_DBLCLK) Importiere(d);
-            else if (HIWORD(wp) == LBN_SELCHANGE && CrcsInSzene().empty()) FuelleAnims(d);
+        }
+        switch (id) {
+        case IDC_DURCHSUCHEN:
+            if (code == BN_CLICKED) {
+                std::wstring o;
+                if (WaehleOrdner(h, o)) {
+                    // Auch LevelPacks oder ein Unterordner des Spiels ist recht.
+                    if (!IstSpielordner(o) && IstSpielordner(o + L"\\..")) o += L"\\..";
+                    wchar_t voll[MAX_PATH];
+                    if (GetFullPathNameW(o.c_str(), MAX_PATH, voll, nullptr) > 0) o = voll;
+                    f->ordner = o;
+                    Lade(*f);
+                }
+            }
             return TRUE;
-        case IDC_ANIMS: if (HIWORD(wp) == LBN_DBLCLK) WendeAn(d); return TRUE;
-        case IDCANCEL: DestroyWindow(d); return TRUE;
-        default: break;
+        case IDC_STATISCH:
+            if (code == BN_CLICKED) {
+                f->statisch = !f->statisch;
+                SchreibeEinstellung(L"StatischeTeile", f->statisch ? L"1" : L"0");
+                FuelleListe(*f);
+            }
+            return TRUE;
+        case IDC_SUCHE:
+            if (code == EN_CHANGE) FuelleListe(*f);
+            return TRUE;
+        case IDC_LISTE:
+            if (code == LBN_SELCHANGE) { ZeigeDetail(*f); Bedienbarkeit(*f); }
+            else if (code == LBN_DBLCLK && IsWindowEnabled(GetDlgItem(h, IDOK))) Importiere(*f);
+            return TRUE;
+        case IDOK:
+            // Eingabetaste im Suchfeld: erst den ersten Treffer waehlen, dann importieren.
+            if (Auswahl(*f) < 0 && !f->sichtbar.empty()) {
+                SendDlgItemMessageW(h, IDC_LISTE, LB_SETCURSEL, 0, 0);
+                ZeigeDetail(*f);
+                Bedienbarkeit(*f);
+                SetFocus(GetDlgItem(h, IDC_LISTE));
+            } else if (IsWindowEnabled(GetDlgItem(h, IDOK))) {
+                Importiere(*f);
+            }
+            return TRUE;
+        case IDC_ANIMFENSTER:
+            if (code == BN_CLICKED) OeffneAnimFenster(h);
+            return TRUE;
+        case IDCANCEL:
+            EndDialog(h, f->importiert ? 1 : 0);
+            return TRUE;
+        default:
+            break;
         }
         break;
-    case WM_ACTIVATE:
-        // Zurueck im Fenster: die Figur in der Szene kann eine andere sein.
-        if (LOWORD(wp) != WA_INACTIVE && g_katalog != nullptr &&
-            SendDlgItemMessageW(d, IDC_AART, CB_GETCURSEL, 0, 0) != 2) FuelleAnims(d);
-        return FALSE;
-    case WM_CLOSE: DestroyWindow(d); return TRUE;
-    case WM_DESTROY:
-        GetCOREInterface()->UnRegisterDlgWnd(d);
-        g_fenster = nullptr;
+    }
+    case WM_CLOSE:
+        EndDialog(h, f->importiert ? 1 : 0);
         return TRUE;
-    default: break;
+    case WM_DESTROY:
+        f->pal.Frei();
+        if (f->fontFett != nullptr) { DeleteObject(f->fontFett); f->fontFett = nullptr; }
+        return FALSE;
+    default:
+        break;
+    }
+    return FALSE;
+}
+
+// Keine Ausnahme darf in Windows' Nachrichtenschleife und damit in Max gelangen.
+INT_PTR CALLBACK DlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    try {
+        return Verarbeite(h, msg, wp, lp);
+    } catch (const std::exception& x) {
+        if (Fenster* f = Zustand(h)) Status(*f, L"Internal error: " + tfu::Breit(x.what()), true);
+    } catch (...) {
+        if (Fenster* f = Zustand(h)) Status(*f, L"Internal error.", true);
     }
     return FALSE;
 }
@@ -281,23 +586,12 @@ INT_PTR CALLBACK DlgProc(HWND d, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 int OeffneFenster() {
-    if (g_fenster != nullptr) {
-        ShowWindow(g_fenster, SW_SHOW);
-        SetForegroundWindow(g_fenster);
-        // Ordner kann sich geaendert haben (Datei -> Importieren mit einer .lp)
-        const std::wstring o = LiesEinstellung(L"Spielordner");
-        if (!o.empty() && _wcsicmp(o.c_str(), Text(g_fenster, IDC_ORDNER).c_str()) != 0) {
-            SetDlgItemTextW(g_fenster, IDC_ORDNER, o.c_str());
-            Lade(g_fenster);
-        } else {
-            FuelleAnims(g_fenster);   // die Figur in der Szene kann eine andere sein
-        }
-        return 1;
-    }
-    HWND h = CreateDialogParamW(hInstance, MAKEINTRESOURCEW(IDD_TFU2), GetCOREInterface()->GetMAXHWnd(), DlgProc, 0);
-    if (h == nullptr) return -1;
-    ShowWindow(h, SW_SHOW);
-    return 1;
+    const HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    Fenster f;
+    const INT_PTR r = DialogBoxParamW(hInstance, MAKEINTRESOURCEW(IDD_FIGUREN), GetCOREInterface()->GetMAXHWnd(), &DlgProc,
+                                      reinterpret_cast<LPARAM>(&f));
+    if (co == S_OK || co == S_FALSE) CoUninitialize();
+    return r == -1 ? -1 : (r == 1 ? 1 : 0);
 }
 
 } // namespace tfu2

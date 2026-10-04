@@ -9,7 +9,7 @@ You need your own copy of the game.*
 
 ## Status
 
-Version 0.1.0 – builds for **3ds Max 2016 to 2027**.
+Version 0.2.0 – builds for **3ds Max 2016 to 2027**.
 
 ## Install
 
@@ -19,16 +19,24 @@ Version 0.1.0 – builds for **3ds Max 2016 to 2027**.
 
 ## Use
 
-* Menu **TFU2 Tool → Import TFU2**, or *File → Import* and pick `pak0.lp` (or
-  `SWTFU2.exe`) of the game.
-* Pick the game folder (the one with `SWTFU2.exe` and `LevelPacks`) and press *Load*.
-* **Characters** (left): pick one and press *Import character* (or double-click).
-  *Static parts* also lists rigid pieces without a skeleton.
-* **Animations** (right): select the character in the scene (any of its bones or
-  meshes), pick a clip and press *Apply to skeleton* (or double-click).
-  * *Same rig* – clips made for this character's rig (default)
+Menu **TFU2 Tool** with two windows (or *File → Import* and pick `pak0.lp` /
+`SWTFU2.exe` of the game):
+
+* **Import TFU2** – the character window. The game folder is found automatically
+  (Steam libraries) or picked with *Browse*. Tabs *Starkiller*, *Characters*,
+  *Creatures + droids*, *Other*, *All*; *Static parts* also lists rigid pieces without
+  a skeleton. Double-click or *Import*. Characters face the front view (−Y).
+* **TFU2 Animations** – pick the character in the scene, then a clip:
+  * *Own clips* – what the game assigns to this character (its chore sets and its
+    cut-scene clips), default
+  * *Same rig* – clips made for its rig
   * *Fits skeleton* – every clip whose bones exist in the skeleton
   * *All* – no filter
+  * *Load* puts one clip on the skeleton. *Load all to timeline* puts every listed
+    clip one after another into the timeline (bind pose at frame 0, *Gap* frames
+    between clips), with a note track and the sequence custom attributes
+    `NeoDexSequenceData` on the scene root (as in SWBF2 Import / WhiteoutDex).
+    *Sequence* jumps the time slider to one clip.
   * *Root motion* off keeps the character in place.
 
 Files: `%LOCALAPPDATA%\TFU2Import\` holds the settings, `import.log` and the extracted

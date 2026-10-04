@@ -10,6 +10,7 @@
 (
   local sSubMenuGuid = "AC158C74-7091-4149-9C5E-F42D5831F33A"
   local sActionGuid  = "2BD1BC8D-94BD-494A-9334-A839EF34F24E"
+  local sAnimGuid    = "2C4084D8-84BC-4483-B709-D232F6365E30"
 
   fn TFU2RegisterMenu =
   (
@@ -20,7 +21,10 @@
       (
         local mnuSub = mgr.mainMenuBar.CreateSubMenu sSubMenuGuid "TFU2 Tool"
         if (mnuSub != undefined) then
+        (
           mnuSub.CreateAction sActionGuid 647394 "TFU2Import_Open`TFU2 Tool"
+          mnuSub.CreateAction sAnimGuid 647394 "TFU2Import_Anim`TFU2 Tool"
+        )
         else
           format "[TFU2] CreateSubMenu returned undefined - GUID already taken?\n"
       )

@@ -23,6 +23,8 @@
 #include <stdmat.h>
 #include <bitmap.h>
 #include <modstack.h>
+#include <notetrck.h>
+#include <maxscript/maxscript.h>
 
 #include <algorithm>
 #include <charconv>
@@ -272,9 +274,37 @@ const char* const kUmhaengen[][2] = {
 // ------------------------------------------------------------
 struct Skelett {
     std::vector<INode*> knoten;
-    std::vector<Matrix3> weltSpiel;    // Bindepose im Spielraum
+    std::vector<Matrix3> weltSpiel;    // Bindepose im Spielraum (schon gedreht, siehe korrektur)
     std::vector<int> eltern;           // nach dem Umhaengen
+    Matrix3 korrektur;                 // Drehung, die auch die Vertices bekommen
 };
+
+// ------------------------------------------------------------
+//  Blickrichtung
+//
+//  Im Modell steht root[0] um -90 Grad um Y gedreht (gemessen an
+//  Starkiller); die Figur blickt in der Bindepose deshalb nach +X, also
+//  in Max nach rechts. Die Animationen setzen root[0] auf ihre eigene
+//  Drehung (meist keine) - dann blickt die Figur nach -Y, in die
+//  Vorderansicht. Damit die Bindepose genauso dasteht, wird die ganze
+//  Figur (Knochen UND Vertices) um die Umkehrung der Wurzeldrehung
+//  gedreht. Danach ist root[0] ungedreht, und Bindepose wie Animation
+//  blicken nach vorn.
+// ------------------------------------------------------------
+Matrix3 BlickKorrektur(const tfu::Modell& m, const std::vector<Matrix3>& weltSpiel) {
+    Matrix3 k;
+    k.IdentityMatrix();
+    int w = m.KnochenNachName("root[0]");
+    if (w < 0)
+        for (size_t i = 0; i < m.knochen.size(); ++i) if (m.knochen[i].eltern < 0) { w = static_cast<int>(i); break; }
+    if (w < 0 || static_cast<size_t>(w) >= weltSpiel.size()) return k;
+    Matrix3 r = weltSpiel[static_cast<size_t>(w)];
+    r.SetRow(3, Point3(0.0f, 0.0f, 0.0f));
+    r.Orthogonalize();
+    k = Inverse(r);
+    k.SetRow(3, Point3(0.0f, 0.0f, 0.0f));
+    return k;
+}
 
 Skelett BaueSkelett(Interface* ip, const tfu::Modell& m, const tfu::FigurEintrag& f, float mass, const std::string& id) {
     Skelett s;
@@ -306,6 +336,8 @@ Skelett BaueSkelett(Interface* ip, const tfu::Modell& m, const tfu::FigurEintrag
         const int k = m.KnochenNachName(u[0]), e = m.KnochenNachName(u[1]);
         if (k >= 0 && e >= 0) s.eltern[static_cast<size_t>(k)] = e;
     }
+    s.korrektur = BlickKorrektur(m, s.weltSpiel);
+    for (Matrix3& w : s.weltSpiel) w = w * s.korrektur;
 
     const Matrix3 a = Achsen();
     AnimationAus keineKeys;
@@ -371,7 +403,7 @@ std::string NeueId() {
 // ------------------------------------------------------------
 //  Meshes
 // ------------------------------------------------------------
-INode* BaueMesh(Interface* ip, const tfu::Teilmesh& t, const std::string& name, float mass) {
+INode* BaueMesh(Interface* ip, const tfu::Teilmesh& t, const std::string& name, float mass, const Matrix3& korrektur) {
     const int nv = static_cast<int>(t.Vertices());
     const int nf = static_cast<int>(t.dreiecke.size() / 3);
     if (nv == 0 || nf == 0) return nullptr;
@@ -380,8 +412,9 @@ INode* BaueMesh(Interface* ip, const tfu::Teilmesh& t, const std::string& name, 
     Mesh& mesh = tri->GetMesh();
     mesh.setNumVerts(nv);
     for (int v = 0; v < nv; ++v) {
-        const float* p = &t.pos[static_cast<size_t>(v) * 3];
-        mesh.setVert(v, p[0] * mass, -p[2] * mass, p[1] * mass);
+        const float* q = &t.pos[static_cast<size_t>(v) * 3];
+        const Point3 p = Point3(q[0], q[1], q[2]) * korrektur;   // Spielraum, wie das Skelett gedreht
+        mesh.setVert(v, p.x * mass, -p.z * mass, p.y * mass);
     }
     mesh.setNumFaces(nf);
     for (int f = 0; f < nf; ++f) {
@@ -426,7 +459,8 @@ INode* BaueMesh(Interface* ip, const tfu::Teilmesh& t, const std::string& name, 
             ns->SetNumNormals(nv);
             for (int v = 0; v < nv; ++v) {
                 const float* q = &t.nrm[static_cast<size_t>(v) * 3];
-                Point3 n(q[0], -q[2], q[1]);
+                const Point3 g = VectorTransform(korrektur, Point3(q[0], q[1], q[2]));
+                Point3 n(g.x, -g.z, g.y);
                 const float l = Length(n);
                 ns->Normal(v) = (l > 1e-8f) ? n / l : Point3(0, 0, 1);
                 ns->SetNormalExplicit(v, true);
@@ -600,11 +634,11 @@ std::vector<INode*> KnochenMitId(Interface* ip, const std::string& id) {
 
 } // namespace
 
-std::vector<uint32_t> CrcsInSzene(std::string* figur) {
+std::vector<uint32_t> CrcsInSzene(const std::string& id, std::string* figur) {
     std::vector<uint32_t> aus;
     Interface* ip = GetCOREInterface();
     if (ip == nullptr) return aus;
-    const std::vector<INode*> knochen = KnochenMitId(ip, ZielId(ip));
+    const std::vector<INode*> knochen = KnochenMitId(ip, id.empty() ? ZielId(ip) : id);
     if (knochen.empty()) return aus;
     if (figur != nullptr) *figur = NodeProp(knochen.front(), _T("tfu2_figur"));
     for (INode* n : knochen) aus.push_back(static_cast<uint32_t>(std::strtoul(NodeProp(n, _T("tfu2_crc")).c_str(), nullptr, 16)));
@@ -645,7 +679,7 @@ bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const Imp
         const tfu::Teilmesh& t = m.meshes[i];
         char nr[16];
         std::snprintf(nr, sizeof nr, "%02zu", i);
-        meshKnoten[i] = BaueMesh(ip, t, f.name + "_" + nr + "_" + KurzName(t.material), mass);
+        meshKnoten[i] = BaueMesh(ip, t, f.name + "_" + nr + "_" + KurzName(t.material), mass, s.korrektur);
         if (meshKnoten[i] != nullptr) {
             verts += t.Vertices();
             tris += t.dreiecke.size() / 3;
@@ -718,6 +752,18 @@ bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const Imp
 
 // ------------------------------------------------------------
 //  Animation
+//
+//  Einzelner Clip: Bild 0 bis Clipende, Keys an den gespeicherten Bildern.
+//  Folge ("Load all to timeline", wie im SWBF2 Import):
+//   * Bild 0 haelt die Bindepose, der erste Clip beginnt nach dem Abstand,
+//     jeder weitere nach Clipende + Abstand.
+//   * Jede Sequenz steht fuer sich: ein Knochen ohne Spur bekommt an BEIDEN
+//     Enden die Ruhelage, eine Spur, die spaeter beginnt oder frueher endet,
+//     ihren ersten/letzten Wert - sonst laeuft ein Clip in den naechsten.
+//   * Notizspur auf der Szenenwurzel: zwei Keys je Sequenz (Anfang, Ende),
+//     beide mit dem Namen (wie XFBIN, Animation Merge Tool und SWBF2).
+//   * Custom Attributes "NeoDexSequenceData" auf der Szenenwurzel - dieselbe
+//     Definition wie WhiteoutDex/SWBF2 (Namen, Anfangs- und Endbild ...).
 // ------------------------------------------------------------
 namespace {
 
@@ -741,13 +787,151 @@ void ZuMax(Matrix3 lokal, bool wurzel, float mass, Quat& q, Point3& p) {
     q = Quat(lokal);
 }
 
+struct Bein {
+    INode* n = nullptr;
+    Matrix3 ruhe;
+    bool istWurzel = false;
+};
+
+struct ZielSkelett {
+    std::vector<Bein> knochen;
+    std::unordered_map<uint32_t, size_t> nachCrc;   // -> Index in knochen
+    std::string figur;
+};
+
+bool HoleSkelett(Interface* ip, const std::string& idWunsch, ZielSkelett& z) {
+    const std::string id = idWunsch.empty() ? ZielId(ip) : idWunsch;
+    for (INode* n : KnochenMitId(ip, id)) {
+        Bein b;
+        if (!MatrixAusText(NodeProp(n, _T("tfu2_rest")), b.ruhe)) continue;
+        b.n = n;
+        b.istWurzel = n->GetParentNode() == nullptr || n->GetParentNode()->IsRootNode();
+        z.nachCrc[static_cast<uint32_t>(std::strtoul(NodeProp(n, _T("tfu2_crc")).c_str(), nullptr, 16))] = z.knochen.size();
+        z.knochen.push_back(b);
+        if (z.figur.empty()) z.figur = NodeProp(n, _T("tfu2_figur"));
+    }
+    return !z.knochen.empty();
+}
+
+size_t Passend(const tfu::AnimClip& c, const ZielSkelett& z) {
+    size_t n = 0;
+    for (const tfu::AnimSpur& s : c.spuren) if (z.nachCrc.count(s.crc)) ++n;
+    return n;
+}
+
+bool PasstClip(const tfu::AnimClip& c, const ZielSkelett& z) {
+    const size_t n = Passend(c, z);
+    return n > 0 && n * 2 >= c.spuren.size();       // dieselbe Regel wie tfu::PasstZu
+}
+
+// Spur je Knochen (Index in z.knochen), nullptr = keine
+std::vector<const tfu::AnimSpur*> SpurenJeKnochen(const tfu::AnimClip& c, const ZielSkelett& z) {
+    std::vector<const tfu::AnimSpur*> aus(z.knochen.size(), nullptr);
+    for (const tfu::AnimSpur& s : c.spuren) {
+        const auto it = z.nachCrc.find(s.crc);
+        if (it != z.nachCrc.end() && !s.keys.empty()) aus[it->second] = &s;
+    }
+    return aus;
+}
+
+// Lokale Lage bei Key k (Drehung/Verschiebung aus der Spur, was fehlt aus der Ruhelage).
+Matrix3 LokalBei(const Bein& b, const tfu::AnimSpur* s, size_t k, bool wurzelBewegung) {
+    Matrix3 l = b.ruhe;
+    if (s == nullptr) return l;
+    const Point3 t0 = l.GetRow(3);
+    if (s->hatR) QuatInZeilen(&s->r[k * 4], l);
+    l.SetRow(3, t0);
+    if (s->hatT && !(b.istWurzel && !wurzelBewegung)) l.SetRow(3, Point3(s->t[k * 3], s->t[k * 3 + 1], s->t[k * 3 + 2]));
+    return l;
+}
+
+// Keys setzen mit fortlaufendem Quaternion-Vorzeichen.
+struct KeySetzer {
+    Control* rot = nullptr;
+    Control* pos = nullptr;
+    bool wurzel = false;
+    float mass = 1.0f;
+    Quat vorher;
+    bool erster = true;
+    size_t keys = 0, flips = 0;
+    void Setze(TimeValue t, const Matrix3& l) {
+        Quat q;
+        Point3 p;
+        ZuMax(l, wurzel, mass, q, p);
+        if (!erster && (q.x * vorher.x + q.y * vorher.y + q.z * vorher.z + q.w * vorher.w) < 0.0f) {
+            q = Quat(-q.x, -q.y, -q.z, -q.w);
+            ++flips;
+        }
+        erster = false;
+        vorher = q;
+        rot->SetValue(t, &q, 1, CTRL_ABSOLUTE);
+        pos->SetValue(t, &p, 1, CTRL_ABSOLUTE);
+        ++keys;
+    }
+};
+
+#if defined(MAX_RELEASE) && (MAX_RELEASE >= 24000)
+bool FuehreSkript(const std::wstring& skript) {
+    return ExecuteMAXScriptScript(skript.c_str(), MAXScript::ScriptSource::NonEmbedded, TRUE) != FALSE;
+}
+#else
+bool FuehreSkript(const std::wstring& skript) {
+    return ExecuteMAXScriptScript(skript.c_str(), TRUE) != FALSE;
+}
+#endif
+
+std::wstring SkriptText(const std::string& s) {
+    std::wstring w;
+    for (wchar_t c : tfu::Breit(s)) {
+        if (c == L'\\' || c == L'"') w += L'\\';
+        w += c;
+    }
+    return w;
+}
+
+void LoescheNotizspuren(INode* w) {
+    while (w != nullptr && w->NumNoteTracks() > 0) w->DeleteNoteTrack(w->GetNoteTrack(0), TRUE);
+}
+
+DWORD WINAPI KeinFortschritt(LPVOID) { return 0; }
+
 } // namespace
 
-bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, std::wstring& bericht) {
+std::vector<SzenenFigur> FigurenInSzene() {
+    std::vector<SzenenFigur> aus;
+    Interface* ip = GetCOREInterface();
+    if (ip == nullptr) return aus;
+    std::map<std::string, size_t> nachId;
+    std::map<std::string, ULONG> neueste;
+    for (INode* n : AlleKnoten(ip)) {
+        if (NodeProp(n, _T("tfu2_crc")).empty()) continue;
+        const std::string id = NodeProp(n, _T("tfu2_id"));
+        if (id.empty()) continue;
+        auto it = nachId.find(id);
+        if (it == nachId.end()) {
+            SzenenFigur f;
+            f.id = id;
+            f.gto = NodeProp(n, _T("tfu2_figur"));
+            f.name = tfu::OhneEndung(tfu::Blatt(f.gto));
+            it = nachId.emplace(id, aus.size()).first;
+            aus.push_back(f);
+        }
+        aus[it->second].knochen++;
+        neueste[id] = std::max(neueste[id], n->GetHandle());
+    }
+    const std::string gewaehlt = ZielId(ip);
+    std::sort(aus.begin(), aus.end(), [&](const SzenenFigur& a, const SzenenFigur& b) {
+        if ((a.id == gewaehlt) != (b.id == gewaehlt)) return a.id == gewaehlt;
+        return neueste[a.id] > neueste[b.id];
+    });
+    return aus;
+}
+
+bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wurzelBewegung, const std::string& id, std::wstring& bericht) {
     Interface* ip = GetCOREInterface();
     LogNeu(("Animation " + animPfad).c_str());
-    const std::vector<INode*> alle = KnochenMitId(ip, ZielId(ip));
-    if (alle.empty()) { bericht = L"No TFU2 character in the scene - import one first."; return false; }
+    ZielSkelett z;
+    if (!HoleSkelett(ip, id, z)) { bericht = L"No TFU2 character in the scene - import one first."; return false; }
     std::vector<uint8_t> roh;
     std::string fehler;
     tfu::AnimClip c;
@@ -756,25 +940,10 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
         bericht = tfu::Breit(fehler);
         return false;
     }
-    // Knochen der Figur: CRC -> Knoten. Wurzel = haengt in Max direkt an der Szene.
-    struct Bein { INode* n; Matrix3 ruhe; bool istWurzel; };
-    std::unordered_map<uint32_t, Bein> nachCrc;
-    std::vector<Bein> knochen;
-    for (INode* n : alle) {
-        const std::string crc = NodeProp(n, _T("tfu2_crc"));
-        const std::string ruhe = NodeProp(n, _T("tfu2_rest"));
-        Matrix3 r;
-        if (crc.empty() || !MatrixAusText(ruhe, r)) continue;
-        Bein b{ n, r, n->GetParentNode() == nullptr || n->GetParentNode()->IsRootNode() };
-        knochen.push_back(b);
-        nachCrc[static_cast<uint32_t>(std::strtoul(crc.c_str(), nullptr, 16))] = b;
-    }
-    size_t passend = 0;
-    for (const tfu::AnimSpur& s : c.spuren) if (nachCrc.count(s.crc)) ++passend;
-    Log("Clip: %.3f s, %d Bilder, %zu Spuren, davon %zu im Skelett (%zu Knochen) der Figur %s", c.dauer, c.bilder, c.spuren.size(),
-        passend, knochen.size(), NodeProp(alle.front(), _T("tfu2_figur")).c_str());
-    // Dieselbe Regel wie der Filter im Fenster (tfu::PasstZu): mindestens die Haelfte.
-    if (passend == 0 || passend * 2 < c.spuren.size()) {
+    const size_t passend = Passend(c, z);
+    Log("Clip: %s s, %d Bilder, %zu Spuren, davon %zu im Skelett (%zu Knochen) der Figur %s", Dez(c.dauer, 3).c_str(), c.bilder,
+        c.spuren.size(), passend, z.knochen.size(), z.figur.c_str());
+    if (!PasstClip(c, z)) {
         char b[256];
         std::snprintf(b, sizeof b, "This animation does not fit the character: only %zu of %zu tracks match its skeleton. Nothing changed.",
                       passend, c.spuren.size());
@@ -782,55 +951,31 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
         Log("%s", b);
         return false;
     }
-
-    const int bildrate = 30;
-    if (GetFrameRate() != bildrate) SetFrameRate(bildrate);
+    if (GetFrameRate() != 30) SetFrameRate(30);
     const int tpf = GetTicksPerFrame();
     const float mass = Massstab();
+    const std::vector<const tfu::AnimSpur*> spuren = SpurenJeKnochen(c, z);
     size_t keys = 0, mitKeys = 0, flips = 0;
     theHold.Suspend();
     ip->DisableSceneRedraw();
+    LoescheNotizspuren(ip->GetRootNode());     // die Sequenzen einer frueheren Folge gelten nicht mehr
     SuspendAnimate();
-    std::unordered_map<INode*, const tfu::AnimSpur*> spurJe;
-    for (const tfu::AnimSpur& s : c.spuren) {
-        const auto it = nachCrc.find(s.crc);
-        if (it != nachCrc.end()) spurJe[it->second.n] = &s;
-    }
-    for (const Bein& b : knochen) {
-        Control* rot = nullptr;
-        Control* pos = nullptr;
-        if (!FrischeController(ip, b.n, rot, pos)) continue;
-        Quat qR;
-        Point3 pR;
-        ZuMax(b.ruhe, b.istWurzel, mass, qR, pR);
-        rot->SetValue(0, &qR, 1, CTRL_ABSOLUTE);
-        pos->SetValue(0, &pR, 1, CTRL_ABSOLUTE);
-        const auto it = spurJe.find(b.n);
-        if (it == spurJe.end() || it->second->keys.empty()) continue;
-        const tfu::AnimSpur& s = *it->second;
+    for (size_t i = 0; i < z.knochen.size(); ++i) {
+        const Bein& b = z.knochen[i];
+        KeySetzer ks;
+        if (!FrischeController(ip, b.n, ks.rot, ks.pos)) continue;
+        ks.wurzel = b.istWurzel;
+        ks.mass = mass;
+        ks.Setze(0, b.ruhe);                   // Grundwert (ohne Animationsmodus: kein Key)
+        ks.keys = 0;
+        const tfu::AnimSpur* s = spuren[i];
+        if (s == nullptr) continue;
         ++mitKeys;
         AnimateOn();
-        Quat vorher;
-        for (size_t k = 0; k < s.keys.size(); ++k) {
-            Matrix3 l = b.ruhe;
-            const Point3 t0 = l.GetRow(3);
-            if (s.hatR) QuatInZeilen(&s.r[k * 4], l);
-            l.SetRow(3, t0);
-            if (s.hatT && !(b.istWurzel && !wurzelBewegung)) l.SetRow(3, Point3(s.t[k * 3], s.t[k * 3 + 1], s.t[k * 3 + 2]));
-            Quat q;
-            Point3 pp;
-            ZuMax(l, b.istWurzel, mass, q, pp);
-            if (k > 0 && (q.x * vorher.x + q.y * vorher.y + q.z * vorher.z + q.w * vorher.w) < 0.0f) {
-                q = Quat(-q.x, -q.y, -q.z, -q.w);
-                ++flips;
-            }
-            vorher = q;
-            const TimeValue tv = static_cast<TimeValue>(s.keys[k]) * tpf;
-            rot->SetValue(tv, &q, 1, CTRL_ABSOLUTE);
-            pos->SetValue(tv, &pp, 1, CTRL_ABSOLUTE);
-            ++keys;
-        }
+        for (size_t k = 0; k < s->keys.size(); ++k) ks.Setze(static_cast<TimeValue>(s->keys[k]) * tpf, LokalBei(b, s, k, wurzelBewegung));
         AnimateOff();
+        keys += ks.keys;
+        flips += ks.flips;
     }
     ResumeAnimate();
     ip->SetAnimRange(Interval(0, std::max(1, c.bilder - 1) * tpf));
@@ -841,11 +986,199 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
     const std::string name = tfu::OhneEndung(tfu::Blatt(animPfad));
     Log("Fertig: %zu Knochen mit Keys, %zu Keys, %zu Vorzeichenwechsel, Bereich 0..%d", mitKeys, keys, flips, c.bilder - 1);
     char b[400];
-    std::snprintf(b, sizeof b, "%s: %d frames (%s s), %zu of %zu tracks on the skeleton, %zu keys", name.c_str(), c.bilder,
-                  Dez(c.dauer, 2).c_str(), passend, c.spuren.size(), keys);
+    std::snprintf(b, sizeof b, "%s: %d frames (%s s), %zu of %zu tracks on %s, %zu keys", name.c_str(), c.bilder,
+                  Dez(c.dauer, 2).c_str(), passend, c.spuren.size(), tfu::OhneEndung(tfu::Blatt(z.figur)).c_str(), keys);
     bericht = tfu::Breit(b);
     return true;
 }
+
+bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, int abstand, bool notiz, bool wurzelBewegung,
+                  const std::string& id, std::vector<Sequenz>& plan, std::wstring& bericht) {
+    const auto t0 = std::chrono::steady_clock::now();
+    Interface* ip = GetCOREInterface();
+    LogNeu(("Folge mit " + std::to_string(pfade.size()) + " Clips").c_str());
+    plan.clear();
+    ZielSkelett z;
+    if (!HoleSkelett(ip, id, z)) { bericht = L"No TFU2 character in the scene - import one first."; return false; }
+    abstand = std::max(0, std::min(abstand, 1000));
+
+    // Clips lesen, nur passende behalten
+    std::vector<tfu::AnimClip> clips;
+    std::vector<std::string> namen;
+    size_t unpassend = 0, kaputt = 0;
+    for (const std::string& pfad : pfade) {
+        std::vector<uint8_t> roh;
+        std::string fehler;
+        tfu::AnimClip c;
+        if (!p.Lies(pfad, roh, fehler) || !c.Lies(roh, fehler)) { ++kaputt; Log("nicht lesbar %s: %s", pfad.c_str(), fehler.c_str()); continue; }
+        if (!PasstClip(c, z)) { ++unpassend; continue; }
+        namen.push_back(tfu::OhneEndung(tfu::Blatt(pfad)));
+        clips.push_back(std::move(c));
+    }
+    if (clips.empty()) {
+        bericht = L"None of the " + std::to_wstring(pfade.size()) + L" clips fits this character - nothing changed.";
+        return false;
+    }
+    // Zeitplan in Bildern
+    if (GetFrameRate() != 30) SetFrameRate(30);
+    const TimeValue tpf = GetTicksPerFrame();
+    int at = abstand;
+    for (size_t i = 0; i < clips.size(); ++i) {
+        Sequenz sq;
+        sq.name = namen[i];
+        sq.start = at;
+        sq.ende = at + std::max(1, clips[i].bilder - 1);
+        plan.push_back(sq);
+        at = sq.ende + abstand;
+    }
+    std::vector<std::vector<const tfu::AnimSpur*>> spuren;
+    spuren.reserve(clips.size());
+    for (const tfu::AnimClip& c : clips) spuren.push_back(SpurenJeKnochen(c, z));
+
+    const float mass = Massstab();
+    size_t keys = 0, flips = 0;
+    bool abgebrochen = false;
+    theHold.Suspend();
+    ip->DisableSceneRedraw();
+    ip->ProgressStart(_T("TFU2: loading animations into the timeline"), TRUE, KeinFortschritt, nullptr);
+    SuspendAnimate();
+    for (size_t i = 0; i < z.knochen.size() && !abgebrochen; ++i) {
+        const Bein& b = z.knochen[i];
+        KeySetzer ks;
+        if (!FrischeController(ip, b.n, ks.rot, ks.pos)) continue;
+        ks.wurzel = b.istWurzel;
+        ks.mass = mass;
+        ks.Setze(0, b.ruhe);
+        ks.keys = 0;
+        AnimateOn();
+        ks.Setze(0, b.ruhe);                                  // Bild 0: Bindepose
+        for (size_t c = 0; c < clips.size(); ++c) {
+            const TimeValue a = plan[c].start * tpf, e = plan[c].ende * tpf;
+            const tfu::AnimSpur* s = spuren[c][i];
+            if (s == nullptr) {
+                ks.Setze(a, b.ruhe);
+                ks.Setze(e, b.ruhe);
+                continue;
+            }
+            const size_t n = s->keys.size();
+            if (s->keys.front() > 0) ks.Setze(a, LokalBei(b, s, 0, wurzelBewegung));
+            for (size_t k = 0; k < n; ++k) {
+                const TimeValue t = a + static_cast<TimeValue>(s->keys[k]) * tpf;
+                if (t > e) break;
+                ks.Setze(t, LokalBei(b, s, k, wurzelBewegung));
+            }
+            if (a + static_cast<TimeValue>(s->keys[n - 1]) * tpf < e) ks.Setze(e, LokalBei(b, s, n - 1, wurzelBewegung));
+        }
+        AnimateOff();
+        keys += ks.keys;
+        flips += ks.flips;
+        ip->ProgressUpdate(static_cast<int>(100.0 * static_cast<double>(i + 1) / static_cast<double>(z.knochen.size())), FALSE);
+        if (ip->GetCancel()) abgebrochen = true;
+    }
+    ResumeAnimate();
+    ip->ProgressEnd();
+    if (abgebrochen) ip->SetCancel(FALSE);
+
+    // Notizspur auf der Szenenwurzel
+    size_t notizKeys = 0;
+    INode* w = ip->GetRootNode();
+    LoescheNotizspuren(w);
+    if (notiz && w != nullptr) {
+        DefNoteTrack* nt = static_cast<DefNoteTrack*>(NewDefaultNoteTrack());
+        if (nt != nullptr) {
+            for (const Sequenz& sq : plan) {
+                const MSTR text = M(sq.name);
+                NoteKey* k0 = new NoteKey(sq.start * tpf, text, 0);
+                NoteKey* k1 = new NoteKey(sq.ende * tpf, text, 0);
+                nt->keys.Append(1, &k0);
+                nt->keys.Append(1, &k1);
+            }
+            w->AddNoteTrack(nt);
+            notizKeys = static_cast<size_t>(nt->keys.Count());
+        }
+    }
+    // Custom Attributes NeoDexSequenceData (Definition wie WhiteoutDex/SWBF2)
+    bool caOk = false;
+    if (notiz) {
+        std::wstring namenL, startL, endeL, nlL, rarL, spL, extL, grL;
+        for (size_t i = 0; i < plan.size(); ++i) {
+            const wchar_t* k = i ? L"," : L"";
+            namenL += k + (L"\"" + SkriptText(plan[i].name) + L"\"");
+            startL += k + std::to_wstring(plan[i].start);
+            endeL += k + std::to_wstring(plan[i].ende);
+            nlL += k + std::wstring(L"false");
+            rarL += k + std::wstring(L"0.0");
+            spL += k + std::wstring(L"0.0");
+            extL += k + std::wstring(L"\"\"");
+            grL += k + std::wstring(L"\"\"");
+        }
+        const std::wstring sk =
+            L"(\n local ca = undefined\n try (ca = ::NeoDexSequenceCA) catch (ca = undefined)\n"
+            L" if (ca == undefined) do ca = attributes \"NeoDexSequenceData\" (\n  parameters main (\n"
+            L"   seqNames type:#stringTab tabSizeVariable:true\n   startFrames type:#intTab tabSizeVariable:true\n"
+            L"   endFrames type:#intTab tabSizeVariable:true\n   nonLooping type:#boolTab tabSizeVariable:true\n"
+            L"   rarity type:#floatTab tabSizeVariable:true\n   moveSpeed type:#floatTab tabSizeVariable:true\n"
+            L"   seqExtents type:#stringTab tabSizeVariable:true\n   sharedGroup type:#stringTab tabSizeVariable:true\n  )\n )\n"
+            L" for i = custAttributes.count rootNode to 1 by -1 do if (custAttributes.get rootNode i).name == \"NeoDexSequenceData\" do custAttributes.delete rootNode i\n"
+            L" custAttributes.add rootNode ca\n"
+            L" rootNode.seqNames = #(" + namenL + L")\n rootNode.startFrames = #(" + startL + L")\n rootNode.endFrames = #(" + endeL +
+            L")\n rootNode.nonLooping = #(" + nlL + L")\n rootNode.rarity = #(" + rarL + L")\n rootNode.moveSpeed = #(" + spL +
+            L")\n rootNode.seqExtents = #(" + extL + L")\n rootNode.sharedGroup = #(" + grL + L")\n OK\n)\n";
+        caOk = FuehreSkript(sk);
+    }
+    ip->SetAnimRange(Interval(0, std::max(1, plan.back().ende) * tpf));
+    ip->SetTime(0);
+    ip->EnableSceneRedraw();
+    theHold.Resume();
+    ip->RedrawViews(ip->GetTime());
+
+    const double sek = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    Log("Folge: %zu Clips (%zu passen nicht, %zu nicht lesbar), %zu Knochen, %zu Keys, %zu Vorzeichenwechsel, Bereich 0..%d, %s s, "
+        "Notizspur %zu Keys, Custom Attributes %s%s",
+        clips.size(), unpassend, kaputt, z.knochen.size(), keys, flips, plan.back().ende, Dez(sek, 1).c_str(), notizKeys,
+        notiz ? (caOk ? "ok" : "FEHLGESCHLAGEN") : "aus", abgebrochen ? " - ABGEBROCHEN" : "");
+    char b[400];
+    std::snprintf(b, sizeof b, "%zu clips in the timeline (gap %d frames, 0 - %d)%s; %zu keys in %s s%s%s", clips.size(), abstand,
+                  plan.back().ende, unpassend ? (", " + std::to_string(unpassend) + " did not fit").c_str() : "", keys, Dez(sek, 1).c_str(),
+                  notiz ? "; note track + sequence attributes" : "", abgebrochen ? " - CANCELLED, bones after that keep the bind pose" : "");
+    bericht = tfu::Breit(b);
+    return true;
+}
+
+bool LiesSequenzen(std::vector<Sequenz>& aus) {
+    aus.clear();
+    Interface* ip = GetCOREInterface();
+    INode* w = ip ? ip->GetRootNode() : nullptr;
+    if (w == nullptr) return false;
+    const TimeValue tpf = std::max(1, GetTicksPerFrame());
+    for (int i = 0; i < w->NumNoteTracks(); ++i) {
+        DefNoteTrack* nt = static_cast<DefNoteTrack*>(w->GetNoteTrack(i));
+        if (nt == nullptr) continue;
+        for (int k = 0; k + 1 < nt->keys.Count(); ++k) {
+            NoteKey* a = nt->keys[k];
+            NoteKey* e = nt->keys[k + 1];
+            if (a == nullptr || e == nullptr || a->note != e->note) continue;
+            Sequenz sq;
+            sq.name = tfu::Utf8(std::wstring(a->note.data()));
+            sq.start = static_cast<int>(a->time / tpf);
+            sq.ende = static_cast<int>(e->time / tpf);
+            aus.push_back(sq);
+            ++k;
+        }
+    }
+    return !aus.empty();
+}
+
+void ZeigeBereich(int startBild, int endeBild) {
+    Interface* ip = GetCOREInterface();
+    if (ip == nullptr) return;
+    const TimeValue tpf = GetTicksPerFrame();
+    ip->SetAnimRange(Interval(startBild * tpf, std::max(startBild + 1, endeBild) * tpf));
+    ip->SetTime(startBild * tpf);
+}
+
+uint32_t ThemeFarbe(int welche) { return static_cast<uint32_t>(GetCustSysColor(welche)); }
+
 
 // ------------------------------------------------------------
 //  Datei -> Importieren
@@ -882,7 +1215,7 @@ int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen) {
         for (size_t i = 0; i < m.meshes.size(); ++i) {
             char nr[16];
             std::snprintf(nr, sizeof nr, "%02zu", i);
-            INode* node = BaueMesh(ip, m.meshes[i], fe.name + "_" + nr + "_" + KurzName(m.meshes[i].material), mass);
+            INode* node = BaueMesh(ip, m.meshes[i], fe.name + "_" + nr + "_" + KurzName(m.meshes[i].material), mass, s.korrektur);
             if (node == nullptr) continue;
             node->SetUserPropString(MSTR(_T("tfu2_id")), M(id));
             node->SetUserPropString(MSTR(_T("tfu2_figur")), M(fe.gto));

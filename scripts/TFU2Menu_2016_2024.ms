@@ -15,15 +15,18 @@
     local itmSub = menuMan.createSubMenuItem sMenuName mnu
     mnuBar.addItem itmSub (mnuBar.numItems())
   )
-  local bFound = false
-  for i = 1 to mnu.numItems() while (not bFound) do
-    if ((mnu.getItem i).getTitle() == "Import TFU2") then bFound = true
-  if (not bFound) then
+  for aItem in #(#("Import TFU2", "TFU2Import_Open"), #("TFU2 Animations", "TFU2Import_Anim")) do
   (
-    local act = menuMan.createActionItem "TFU2Import_Open" "TFU2 Tool"
-    act.setTitle "Import TFU2"
-    act.setUseCustomTitle true
-    mnu.addItem act -1
+    local bFound = false
+    for i = 1 to mnu.numItems() while (not bFound) do
+      if ((mnu.getItem i).getTitle() == aItem[1]) then bFound = true
+    if (not bFound) then
+    (
+      local act = menuMan.createActionItem aItem[2] "TFU2 Tool"
+      act.setTitle aItem[1]
+      act.setUseCustomTitle true
+      mnu.addItem act -1
+    )
   )
   menuMan.updateMenuBar()
 )
