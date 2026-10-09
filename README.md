@@ -18,7 +18,7 @@ it, settings are kept.
 
 1. Close 3ds Max.
 2. Download `TFUImport-<version>-Setup.exe` from the
-   [Releases](https://github.com/DennisHerrm/TFU2-Import-3dsMax/releases) page and run it
+   [Releases](https://github.com/DennisHerrm/TFU-Import-3dsMax/releases) page and run it
    (for all users, or only for you). It installs the Microsoft Visual C++ runtime if
    it is missing.
    *Or* download the ZIP, extract it and run `Install.bat`.

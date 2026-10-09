@@ -13,4 +13,4 @@ Requirements
 - Close 3ds Max before installing
 
 License: GPL-3.0 (see LICENSE on GitHub)
-https://github.com/DennisHerrm/TFU2-Import-3dsMax
+https://github.com/DennisHerrm/TFU-Import-3dsMax

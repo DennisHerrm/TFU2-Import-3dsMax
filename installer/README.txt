@@ -32,7 +32,7 @@ Windows warning ("Windows protected your PC")
   (SHA256SUMS.txt) on the release page show that the file is unchanged.
 
 More information, source code and bug reports:
-  https://github.com/DennisHerrm/TFU2-Import-3dsMax
+  https://github.com/DennisHerrm/TFU-Import-3dsMax
 
 Disclaimer
   Unofficial, free fan project. It is NOT made by, affiliated with, endorsed
