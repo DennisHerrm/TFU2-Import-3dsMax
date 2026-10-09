@@ -20,6 +20,8 @@
 #include "tfu_model.h"
 #include "tfu_pak.h"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -202,6 +204,213 @@ int wmain(int argc, wchar_t** argv) {
     if (befehl == "checkanims") return PruefeAnims(p, k);
     if (befehl == "checkmodels") return PruefeModelle(p);
     if (befehl == "animhash") return AnimHash(p, k);
+    if (befehl == "diff" && argc > 5) {
+        // tfudump <spiel A> diff <spiel B> <clip in A> <clip in B>:
+        // je Bild und Knochen der Winkel zwischen den Rotationen (Keys linear/nlerp
+        // abgetastet) und der Abstand der Wurzel-Translation.
+        Pakete pb;
+        if (!pb.Oeffne(argv[3], fehler)) { std::printf("ERROR %s\n", fehler.c_str()); return 1; }
+        AnimClip ca, cb;
+        std::vector<uint8_t> roh;
+        if (!p.Lies(Utf8(argv[4]), roh, fehler) || !ca.Lies(roh, fehler) || !pb.Lies(Utf8(argv[5]), roh, fehler) || !cb.Lies(roh, fehler)) {
+            std::printf("ERROR %s\n", fehler.c_str());
+            return 1;
+        }
+        auto taste = [](const AnimSpur& s, float bild, float q[4], float t[3]) {
+            size_t i = 0;
+            while (i + 1 < s.keys.size() && s.keys[i + 1] <= bild) ++i;
+            size_t j = std::min(i + 1, s.keys.size() - 1);
+            float w = (j == i || s.keys[j] == s.keys[i]) ? 0.0f : (bild - s.keys[i]) / float(s.keys[j] - s.keys[i]);
+            w = std::clamp(w, 0.0f, 1.0f);
+            if (s.hatR) {
+                const float* a = &s.r[i * 4];
+                const float* b = &s.r[j * 4];
+                const float d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+                const float sg = d < 0 ? -1.0f : 1.0f;
+                float l = 0;
+                for (int c = 0; c < 4; ++c) { q[c] = a[c] * (1 - w) + sg * b[c] * w; l += q[c] * q[c]; }
+                l = std::sqrt(l);
+                for (int c = 0; c < 4; ++c) q[c] /= l;
+            }
+            if (s.hatT) for (int c = 0; c < 3; ++c) t[c] = s.t[i * 3 + c] * (1 - w) + s.t[j * 3 + c] * w;
+        };
+        std::map<uint32_t, const AnimSpur*> nachB;
+        for (const AnimSpur& s : cb.spuren) nachB[s.crc] = &s;
+        const int bilder = std::min(ca.bilder, cb.bilder);
+        double summe = 0;
+        size_t n = 0;
+        float maxW = 0, maxT = 0;
+        size_t ueber5 = 0, ueber15 = 0;
+        for (const AnimSpur& sa : ca.spuren) {
+            const auto it = nachB.find(sa.crc);
+            if (it == nachB.end() || !sa.hatR || !it->second->hatR || sa.keys.empty() || it->second->keys.empty()) continue;
+            float mittel = 0;
+            for (int f = 0; f < bilder; ++f) {
+                float qa[4], qb[4], ta[3] = {}, tb[3] = {};
+                taste(sa, float(f), qa, ta);
+                taste(*it->second, float(f), qb, tb);
+                const float d = std::fabs(qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3]);
+                const float grad = 2.0f * std::acos(std::min(1.0f, d)) * 57.29578f;
+                mittel += grad;
+                maxW = std::max(maxW, grad);
+                if (sa.crc == 0xeb79e903u || sa.crc == 0xf262d842u) {   // root[0], root[1]: Weg der Figur
+                    const float dt = std::sqrt((ta[0] - tb[0]) * (ta[0] - tb[0]) + (ta[1] - tb[1]) * (ta[1] - tb[1]) + (ta[2] - tb[2]) * (ta[2] - tb[2]));
+                    maxT = std::max(maxT, dt);
+                }
+            }
+            mittel /= float(std::max(1, bilder));
+            summe += mittel;
+            ++n;
+            if (mittel > 5) ++ueber5;
+            if (mittel > 15) ++ueber15;
+        }
+        std::printf("DIFF frames %d/%d  bones %zu  mean %.2f deg  max %.1f deg  bones>5deg %zu  >15deg %zu  root path %.3f m\n",
+                    ca.bilder, cb.bilder, n, n ? summe / n : 0.0, maxW, ueber5, ueber15, maxT);
+        return 0;
+    }
+    if (befehl == "diffpose" && argc > 7) {
+        // tfudump <spiel A> diffpose <spiel B> <clip A> <clip B> <figur A> <figur B>:
+        // Gelenkpositionen je Bild (Vorwaertskinematik mit dem Skelett der jeweiligen
+        // Figur), Huefte in den Ursprung, Drehung um Y bestmoeglich angeglichen;
+        // gemeldet wird der mittlere Abstand der Koerpergelenke (cm).
+        Pakete pb;
+        Katalog kb;
+        if (!pb.Oeffne(argv[3], fehler) || !kb.Baue(pb, fehler)) { std::printf("ERROR %s\n", fehler.c_str()); return 1; }
+        struct Seite { const Pakete* p; Modell m; AnimClip c; };
+        Seite s[2];
+        s[0].p = &p;
+        s[1].p = &pb;
+        const FigurEintrag* fa = FindeFigur(k, Utf8(argv[6]));
+        const FigurEintrag* fb = FindeFigur(kb, Utf8(argv[7]));
+        const std::string clips[2] = { Utf8(argv[4]), Utf8(argv[5]) };
+        const FigurEintrag* figs[2] = { fa, fb };
+        for (int i = 0; i < 2; ++i) {
+            std::vector<uint8_t> roh;
+            GtoDatei g;
+            if (figs[i] == nullptr || !s[i].p->Lies(figs[i]->gto, roh, fehler) || !g.Lies(roh, fehler) || !s[i].m.Lies(g, fehler) ||
+                !s[i].p->Lies(clips[i], roh, fehler) || !s[i].c.Lies(roh, fehler)) {
+                std::printf("ERROR side %d %s\n", i, fehler.c_str());
+                return 1;
+            }
+        }
+        // Koerpergelenke, die beide Skelette haben
+        static const char* const kGelenke[] = { "hips[0]", "spine[1]", "spine[3]", "neck[1]", "lUpperArm[0]", "lLowerArm[0]", "lHand[0]",
+                                                "rUpperArm[0]", "rLowerArm[0]", "rHand[0]", "lUpperLeg[0]", "lLowerLeg[0]", "lFoot[0]",
+                                                "rUpperLeg[0]", "rLowerLeg[0]", "rFoot[0]" };
+        // Lokale Matrix (Zeilenvektoren wie BasePoseMatrices): Zeilen 0-2 Achsen, Zeile 3 Verschiebung
+        auto ausQuat = [](const float q[4], const float t[3], float m[16]) {
+            const float x = q[0], y = q[1], z = q[2], w = q[3];
+            const float r[9] = { 1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w),
+                                 2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w),
+                                 2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y) };
+            for (int a = 0; a < 3; ++a) { for (int b = 0; b < 3; ++b) m[a * 4 + b] = r[a * 3 + b]; m[a * 4 + 3] = 0; }
+            m[12] = t[0]; m[13] = t[1]; m[14] = t[2]; m[15] = 1;
+        };
+        auto mal = [](const float a[16], const float b[16], float o[16]) {
+            for (int i = 0; i < 4; ++i) for (int j = 0; j < 4; ++j) { float v = 0; for (int q = 0; q < 4; ++q) v += a[i * 4 + q] * b[q * 4 + j]; o[i * 4 + j] = v; }
+        };
+        auto taste = [](const AnimSpur& sp, float bild, float q[4], float t[3]) {
+            size_t i = 0;
+            while (i + 1 < sp.keys.size() && sp.keys[i + 1] <= bild) ++i;
+            const size_t j = std::min(i + 1, sp.keys.size() - 1);
+            float w = (j == i || sp.keys[j] == sp.keys[i]) ? 0.0f : std::clamp((bild - sp.keys[i]) / float(sp.keys[j] - sp.keys[i]), 0.0f, 1.0f);
+            if (sp.hatR) {
+                const float* a = &sp.r[i * 4];
+                const float* b = &sp.r[j * 4];
+                const float sg = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]) < 0 ? -1.0f : 1.0f;
+                float l = 0;
+                for (int c = 0; c < 4; ++c) { q[c] = a[c] * (1 - w) + sg * b[c] * w; l += q[c] * q[c]; }
+                for (int c = 0; c < 4; ++c) q[c] /= std::sqrt(l);
+            }
+            if (sp.hatT) for (int c = 0; c < 3; ++c) t[c] = sp.t[i * 3 + c] * (1 - w) + sp.t[j * 3 + c] * w;
+        };
+        // Weltpositionen der Gelenke in Bild f
+        auto pose = [&](const Seite& se, int f, std::vector<std::array<float, 3>>& aus) {
+            std::map<uint32_t, const AnimSpur*> spur;
+            for (const AnimSpur& sp : se.c.spuren) spur[sp.crc] = &sp;
+            std::vector<std::array<float, 16>> welt(se.m.knochen.size());
+            for (size_t i = 0; i < se.m.knochen.size(); ++i) {
+                const Knochen& b = se.m.knochen[i];
+                float lok[16];
+                std::copy(b.lokal, b.lokal + 16, lok);
+                const auto it = spur.find(b.crc);
+                if (it != spur.end() && !it->second->keys.empty()) {
+                    float q[4] = { 0, 0, 0, 1 }, t[3] = { b.lokal[12], b.lokal[13], b.lokal[14] };
+                    taste(*it->second, float(f), q, t);
+                    if (it->second->hatR) ausQuat(q, t, lok);
+                    else { lok[12] = t[0]; lok[13] = t[1]; lok[14] = t[2]; }
+                }
+                if (b.eltern >= 0) mal(lok, welt[static_cast<size_t>(b.eltern)].data(), welt[i].data());
+                else std::copy(lok, lok + 16, welt[i].data());
+            }
+            aus.clear();
+            for (const char* g : kGelenke) {
+                const int i = se.m.KnochenNachName(g);
+                if (i < 0) { aus.push_back({ 1e9f, 0, 0 }); continue; }
+                aus.push_back({ welt[i][12], welt[i][13], welt[i][14] });
+            }
+        };
+        const int bilder = std::min(s[0].c.bilder, s[1].c.bilder);
+        double summe = 0, schlimmstes = 0;
+        size_t n = 0;
+        std::vector<std::array<float, 3>> pa, pb2;
+        for (int f = 0; f < bilder; ++f) {
+            pose(s[0], f, pa);
+            pose(s[1], f, pb2);
+            // relativ zur Huefte, dann beste Drehung um Y (geschlossen)
+            double sxz = 0, sxx = 0;
+            std::vector<std::array<double, 3>> a, b;
+            for (size_t i = 0; i < pa.size(); ++i) {
+                if (pa[i][0] > 1e8f || pb2[i][0] > 1e8f) continue;
+                a.push_back({ pa[i][0] - pa[0][0], pa[i][1] - pa[0][1], pa[i][2] - pa[0][2] });
+                b.push_back({ pb2[i][0] - pb2[0][0], pb2[i][1] - pb2[0][1], pb2[i][2] - pb2[0][2] });
+            }
+            for (size_t i = 0; i < a.size(); ++i) {
+                sxx += a[i][0] * b[i][0] + a[i][2] * b[i][2];
+                sxz += a[i][2] * b[i][0] - a[i][0] * b[i][2];
+            }
+            const double th = std::atan2(sxz, sxx), c = std::cos(th), sn = std::sin(th);
+            double bild = 0;
+            for (size_t i = 1; i < a.size(); ++i) {
+                const double x = c * a[i][0] + sn * a[i][2], z = -sn * a[i][0] + c * a[i][2];
+                bild += std::sqrt((x - b[i][0]) * (x - b[i][0]) + (a[i][1] - b[i][1]) * (a[i][1] - b[i][1]) + (z - b[i][2]) * (z - b[i][2]));
+            }
+            if (a.size() > 1) bild /= double(a.size() - 1);
+            summe += bild;
+            schlimmstes = std::max(schlimmstes, bild);
+            ++n;
+            if (f == 0 && argc > 8) {
+                for (size_t i = 0; i < a.size(); ++i)
+                    std::printf("  %-12s A %6.3f %6.3f %6.3f   B %6.3f %6.3f %6.3f\n", kGelenke[i], a[i][0], a[i][1], a[i][2], b[i][0], b[i][1], b[i][2]);
+            }
+        }
+        std::printf("POSE frames %d/%d  mean %.1f cm  worst frame %.1f cm\n", s[0].c.bilder, s[1].c.bilder, n ? 100.0 * summe / n : 0.0, 100.0 * schlimmstes);
+        return 0;
+    }
+    if (befehl == "cliplist") {
+        // Je Clip: Name, Bilder, Spuren, Pruefsumme der dekodierten Werte, Pfad;
+        // mit Figur nur ihre eigenen Clips (Spalte OWN 1/0).
+        const FigurEintrag* f = arg3.empty() ? nullptr : FindeFigur(k, arg3);
+        std::vector<char> eigen(k.animationen.size(), 0);
+        if (f != nullptr) for (size_t i : k.EigeneAnimationen(p, *f)) eigen[i] = 1;
+        for (size_t i = 0; i < k.animationen.size(); ++i) {
+            const AnimEintrag& a = k.animationen[i];
+            std::vector<uint8_t> roh;
+            AnimClip c;
+            if (!p.Lies(a.pfad, roh, fehler) || !c.Lies(roh, fehler)) continue;
+            uint64_t h = 1469598103934665603ull;
+            for (const AnimSpur& sp : c.spuren) {
+                for (const auto* v : { static_cast<const void*>(sp.t.data()), static_cast<const void*>(sp.r.data()) }) {
+                    const size_t n = (v == sp.t.data() ? sp.t.size() : sp.r.size()) * sizeof(float);
+                    const uint8_t* b = static_cast<const uint8_t*>(v);
+                    for (size_t j = 0; j < n; ++j) { h ^= b[j]; h *= 1099511628211ull; }
+                }
+            }
+            std::printf("CLIP\t%s\t%d\t%zu\t%016llx\t%d\t%s\n", a.name.c_str(), c.bilder, c.spuren.size(),
+                        static_cast<unsigned long long>(h), eigen[i], a.pfad.c_str());
+        }
+        return 0;
+    }
     if (befehl == "fit") {
         // Welche Animationen passen zum Skelett einer Figur? (derselbe Filter wie im Fenster)
         const FigurEintrag* f = FindeFigur(k, arg3);
