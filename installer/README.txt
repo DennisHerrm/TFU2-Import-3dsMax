@@ -7,8 +7,9 @@ The Force Unleashed II (PC) in 3ds Max: skeleton, skinned meshes, materials with
 Install
   1. Extract the whole ZIP.
   2. Close 3ds Max.
-  3. Double-click Install.bat. Windows asks for admin rights (install for
-     all users). If you decline, the plugin is installed for you only.
+  3. Double-click Install.bat. It installs for all users into
+     C:\ProgramData\Autodesk\ApplicationPlugins\TFU2Import - Windows asks
+     for admin rights if needed.
   4. Start 3ds Max: menu "TFU Tool" -> "Import TFU" and "TFU Animations".
 
   Alternative: use TFUImport-<version>-Setup.exe from the release page.

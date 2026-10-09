@@ -4,11 +4,10 @@ REM  TFU Import for 3ds Max - installation without Setup.exe
 REM
 REM  Sits in the ZIP next to the TFU2Import\ folder and copies it to where
 REM  3ds Max 2016-2027 looks for plugin packages (Autodesk "Packaging Plug-ins"):
-REM    %ProgramData%\Autodesk\ApplicationPlugins\TFU2Import   all users
-REM    %AppData%\Autodesk\ApplicationPlugins\TFU2Import       current user
-REM  For ProgramData Windows asks once for admin rights. If you decline, the
-REM  plugin is installed for the current user only.
-REM    Install.bat /user   install for the current user without asking
+REM    %ProgramData%\Autodesk\ApplicationPlugins\TFU2Import   (all users)
+REM  If that folder is not writable, Windows asks once for admin rights.
+REM  An older installation for the current user only (%AppData%, up to 0.3.1)
+REM  is removed - 3ds Max would otherwise load the plugin twice.
 REM ===========================================================================
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -37,27 +36,26 @@ if not errorlevel 1 (
   goto max_pruefen
 )
 
-REM ---- Where to? ProgramData if writable - otherwise ask for admin rights --
+REM ---- ProgramData writable? Otherwise ask for admin rights ----------------
 set "ZIEL="
-if /i "%~1"=="/user" goto nur_ich
 mkdir "%ProgramData%\Autodesk\ApplicationPlugins" >nul 2>&1
 set "PROBE=%ProgramData%\Autodesk\ApplicationPlugins\.tfu2probe"
 2>nul (>>"%PROBE%" (call )) && set "ZIEL=%ZIEL_ALLE%"
 del "%PROBE%" >nul 2>&1
 if defined ZIEL goto kopieren
-if /i "%~1"=="/elevated" goto nur_ich
-
-echo  To install for all users, Windows will now ask for admin rights.
-echo  If you decline, the plugin is installed for you only.
-powershell -NoProfile -Command "try { Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs -Wait -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>&1
-if not errorlevel 1 (
-  echo  The installation ran in the admin window.
+if /i "%~1"=="/elevated" (
+  echo  ERROR: no write access to %ZIEL_ALLE% even with admin rights.
   goto ende
 )
 
-:nur_ich
-set "ZIEL=%ZIEL_ICH%"
-echo  Installing for the current user only (no admin rights).
+echo  Windows will now ask for admin rights (install for all users).
+powershell -NoProfile -Command "try { Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs -Wait -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>&1
+if not errorlevel 1 (
+  echo  The installation ran in the admin window.
+) else (
+  echo  Not installed - admin rights were declined.
+)
+goto ende
 
 :kopieren
 echo  Target: %ZIEL%
@@ -73,7 +71,7 @@ if not exist "%ZIEL%\PackageContents.xml" (
   goto ende
 )
 REM  An old per-user installation would load a second time.
-if /i "%ZIEL%"=="%ZIEL_ALLE%" if exist "%ZIEL_ICH%\PackageContents.xml" rmdir /s /q "%ZIEL_ICH%" >nul 2>&1
+if exist "%ZIEL_ICH%" rmdir /s /q "%ZIEL_ICH%" >nul 2>&1
 
 set ANZAHL=0
 for /R "%ZIEL%\Contents" %%f in (TFU2Import.dl*) do if /i "%%~xf"==".dlu" set /a ANZAHL+=1

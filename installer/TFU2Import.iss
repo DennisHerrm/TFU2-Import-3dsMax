@@ -7,8 +7,8 @@
 ;  Ziel (Autodesk "Packaging Plug-ins"): 3ds Max durchsucht
 ;    %ProgramData%\Autodesk\ApplicationPlugins\<name>   alle Benutzer (Admin)
 ;    %AppData%\Autodesk\ApplicationPlugins\<name>       nur dieser Benutzer
-;  {autoappdata} ist je nach Installationsart genau einer der beiden Orte
-;  (PrivilegesRequiredOverridesAllowed=dialog: der Benutzer waehlt beim Start).
+;  Seit 0.3.2 nur noch fuer alle Benutzer ({commonappdata} = ProgramData, Admin);
+;  eine aeltere Installation unter %AppData% wird dabei entfernt.
 ;
 ;  Die .dlu braucht die Visual-C++-Laufzeit v14, gebaut mit MSVC 14.50 - die
 ;  Laufzeit muss mindestens so neu sein. vc_redist.x64.exe (von Microsoft
@@ -18,7 +18,7 @@
 ; ============================================================================
 
 #ifndef AppVer
-  #define AppVer "0.3.1"
+  #define AppVer "0.3.2"
 #endif
 #ifndef PaketDir
   #define PaketDir "..\dist\paket\TFU2Import"
@@ -42,13 +42,11 @@ VersionInfoDescription=TFU Import for 3ds Max - Setup
 VersionInfoCompany=DH
 VersionInfoCopyright=DH
 VersionInfoProductName=TFU Import for 3ds Max
-DefaultDirName={autoappdata}\Autodesk\ApplicationPlugins\TFU2Import
+DefaultDirName={commonappdata}\Autodesk\ApplicationPlugins\TFU2Import
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 DisableReadyPage=no
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
-UsePreviousPrivileges=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -82,9 +80,13 @@ en.Fertig=Restart 3ds Max. The "TFU Tool" menu with "Import TFU" and "TFU Animat
 [InstallDelete]
 ; Reste einer aelteren Fassung muessen weg - Max laedt jede .dlu im Paket.
 Type: filesandordirs; Name: "{app}\Contents"
-; Eine fruehere Installation nur fuer diesen Benutzer wuerde neben der fuer
-; alle Benutzer ein zweites Mal geladen.
-Type: filesandordirs; Name: "{userappdata}\Autodesk\ApplicationPlugins\TFU2Import"; Check: IsAdminInstallMode
+; Eine fruehere Installation nur fuer diesen Benutzer (bis 0.3.1 moeglich) wuerde
+; neben der fuer alle Benutzer ein zweites Mal geladen.
+Type: filesandordirs; Name: "{userappdata}\Autodesk\ApplicationPlugins\TFU2Import"
+
+[Registry]
+; ... und ihr Eintrag unter "Apps" (Setup fuer nur diesen Benutzer)
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7B9E0AC2-B683-4310-B14C-9AC1897B761E}_is1"; ValueType: none; Flags: deletekey dontcreatekey
 
 [Files]
 Source: "{#PaketDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

@@ -10,7 +10,7 @@ skeleton, skinned meshes, materials with textures, and animations.
 > The Walt Disney Company; 3ds Max is a trademark of Autodesk. **No game data is
 > included** – the plugin reads the files of your own installation of the game.
 
-Version 0.3.1 – for **3ds Max 2016 to 2027** (Windows 10/11, 64-bit).
+Version 0.3.2 – for **3ds Max 2016 to 2027** (Windows 10/11, 64-bit).
 Up to 0.3.0 the plugin was called *TFU2 Import* (menu *TFU2 Tool*); updating replaces
 it, settings are kept.
 
@@ -19,8 +19,9 @@ it, settings are kept.
 1. Close 3ds Max.
 2. Download `TFUImport-<version>-Setup.exe` from the
    [Releases](https://github.com/DennisHerrm/TFU-Import-3dsMax/releases) page and run it
-   (for all users, or only for you). It installs the Microsoft Visual C++ runtime if
-   it is missing.
+   (needs admin rights). It installs into
+   `C:\ProgramData\Autodesk\ApplicationPlugins\TFU2Import` for all users, and the
+   Microsoft Visual C++ runtime if it is missing.
    *Or* download the ZIP, extract it and run `Install.bat`.
 3. Start 3ds Max – the menu **TFU Tool** is there.
 
@@ -77,7 +78,7 @@ textures (normal maps are converted from DXT5nm to regular RGB PNGs).
 ## Building from source
 
 `BUILD.bat` builds the plugin for every 3ds Max 2016–2027 whose SDK is installed
-(Visual Studio with C++ and CMake needed) and installs it for the current user.
+(Visual Studio with C++ and CMake needed) and installs it to ProgramData.
 `installer\BAUE_RELEASE.bat` makes the Setup.exe (Inno Setup 6) and the ZIP.
 File formats and design notes: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 

@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#define TFU2IMPORT_VERSION      301
-#define TFU2IMPORT_VERSION_STR  _T("0.3.1")
+#define TFU2IMPORT_VERSION      302
+#define TFU2IMPORT_VERSION_STR  _T("0.3.2")
 
 // Einmalig gezogen, nie wieder aendern.
 #define TFU2IMPORT_SCENE_CLASS_ID  Class_ID(0x4c1e7b93, 0x2a6f0d58)

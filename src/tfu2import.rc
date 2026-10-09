@@ -73,8 +73,8 @@ BEGIN
 END
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,3,1,0
- PRODUCTVERSION 0,3,1,0
+ FILEVERSION 0,3,2,0
+ PRODUCTVERSION 0,3,2,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS VOS_NT_WINDOWS32
@@ -87,11 +87,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "DH"
             VALUE "FileDescription", "TFU Import - Star Wars The Force Unleashed I + II for 3ds Max"
-            VALUE "FileVersion", "0.3.1"
+            VALUE "FileVersion", "0.3.2"
             VALUE "InternalName", "TFU2Import"
             VALUE "OriginalFilename", "TFU2Import.dlu"
             VALUE "ProductName", "TFU Import"
-            VALUE "ProductVersion", "0.3.1"
+            VALUE "ProductVersion", "0.3.2"
         END
     END
     BLOCK "VarFileInfo"

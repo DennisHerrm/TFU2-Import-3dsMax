@@ -9,7 +9,7 @@ How the plugin reads *Star Wars: The Force Unleashed II* and *The Force Unleashe
 |---|---|
 | `BUILD.bat` | builds `TFU2Import.dlu` for every 3ds Max 2016–2027 whose SDK is installed (`C:\Program Files\Autodesk\3ds Max <year> SDK`), then runs `INSTALLIERE.bat` |
 | `BUILD.bat 2026` | only that version |
-| `INSTALLIERE.bat` | copies `output\` to `%APPDATA%\Autodesk\ApplicationPlugins\TFU2Import`; versions whose Max is running are skipped |
+| `INSTALLIERE.bat` | copies `output\` to `%ProgramData%\Autodesk\ApplicationPlugins\TFU2Import` (asks for admin rights if needed) and removes an old copy under `%APPDATA%`; versions whose Max is running are skipped |
 | `installer\BAUE_RELEASE.bat` | Setup.exe (Inno Setup 6) + ZIP + SHA256SUMS in `dist\` |
 
 Needs Visual Studio with C++ and CMake. The reader also builds without the Max SDK
