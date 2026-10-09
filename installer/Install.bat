@@ -1,6 +1,6 @@
 @echo off
 REM ===========================================================================
-REM  TFU2 Import for 3ds Max - installation without Setup.exe
+REM  TFU Import for 3ds Max - installation without Setup.exe
 REM
 REM  Sits in the ZIP next to the TFU2Import\ folder and copies it to where
 REM  3ds Max 2016-2027 looks for plugin packages (Autodesk "Packaging Plug-ins"):
@@ -17,7 +17,7 @@ set "ZIEL_ALLE=%ProgramData%\Autodesk\ApplicationPlugins\TFU2Import"
 set "ZIEL_ICH=%APPDATA%\Autodesk\ApplicationPlugins\TFU2Import"
 
 echo.
-echo  TFU2 Import for 3ds Max - installation
+echo  TFU Import for 3ds Max - installation
 echo  =======================================
 echo.
 
@@ -91,7 +91,7 @@ if !LZ! LSS 50 (
 )
 
 echo.
-echo  Done. Restart 3ds Max - you will find the "TFU2 Tool" menu.
+echo  Done. Restart 3ds Max - you will find the "TFU Tool" menu.
 
 :ende
 echo.

@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - DLL-Einstieg, Importer-Klasse und MAXScript
+//  TFU Import - DLL-Einstieg, Importer-Klasse und MAXScript
 //
 //  Die Exporte sind nicht extern "C"; die .def-Datei sorgt dafuer,
 //  dass Max die undekorierten Namen findet (wie beim SWBF2 Import).
@@ -39,9 +39,9 @@ public:
     const MCHAR* OtherMessage2() override { return _T(""); }
     unsigned int Version() override { return TFU2IMPORT_VERSION; }
     void ShowAbout(HWND hWnd) override {
-        MessageBox(hWnd, _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T("\n\nCharacters and animations straight from\n")
+        MessageBox(hWnd, _T("TFU Import ") TFU2IMPORT_VERSION_STR _T("\n\nCharacters and animations straight from\n")
                          _T("Star Wars: The Force Unleashed and The Force Unleashed II.\n\nNot affiliated with Lucasfilm, LucasArts, Disney or Autodesk."),
-                   _T("TFU2 Import"), MB_ICONINFORMATION);
+                   _T("TFU Import"), MB_ICONINFORMATION);
     }
     int DoImport(const MCHAR* name, ImpInterface*, Interface*, BOOL suppressPrompts) override {
         return tfu2::ImportiereEingang(name, suppressPrompts);
@@ -53,9 +53,9 @@ public:
     int IsPublic() override { return TRUE; }
     // new statt statischem Objekt: Max gibt die Importer-Instanz selbst frei.
     void* Create(BOOL) override { return new TFU2SceneImport(); }
-    const MCHAR* ClassName() override { return _T("TFU2 Import"); }
+    const MCHAR* ClassName() override { return _T("TFU Import"); }
 #if defined(MAX_RELEASE) && (MAX_RELEASE >= 24000)
-    const MCHAR* NonLocalizedClassName() override { return _T("TFU2 Import"); }
+    const MCHAR* NonLocalizedClassName() override { return _T("TFU Import"); }
 #endif
     SClass_ID SuperClassID() override { return SCENE_IMPORT_CLASS_ID; }
     Class_ID ClassID() override { return TFU2IMPORT_SCENE_CLASS_ID; }
@@ -167,7 +167,7 @@ static TFU2ImportFP theTFU2ImportFP(
     p_end);
 
 __declspec(dllexport) const TCHAR* LibDescription() {
-    return _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T(" - Star Wars: The Force Unleashed I + II Importer");
+    return _T("TFU Import ") TFU2IMPORT_VERSION_STR _T(" - Star Wars: The Force Unleashed I + II Importer");
 }
 __declspec(dllexport) int LibNumberClasses() { return 1; }
 __declspec(dllexport) ClassDesc* LibClassDesc(int i) { return (i == 0) ? &theSceneImportClassDesc : nullptr; }

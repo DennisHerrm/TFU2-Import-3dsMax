@@ -1,6 +1,6 @@
 @echo off
 REM ===========================================================================
-REM  TFU2 Import for 3ds Max - uninstall (counterpart of Install.bat)
+REM  TFU Import for 3ds Max - uninstall (counterpart of Install.bat)
 REM  Removes the package from both locations. If you installed with the
 REM  Setup.exe, better uninstall via Windows Settings - Apps.
 REM ===========================================================================
@@ -9,7 +9,7 @@ set "ZIEL_ALLE=%ProgramData%\Autodesk\ApplicationPlugins\TFU2Import"
 set "ZIEL_ICH=%APPDATA%\Autodesk\ApplicationPlugins\TFU2Import"
 
 echo.
-echo  TFU2 Import for 3ds Max - uninstall
+echo  TFU Import for 3ds Max - uninstall
 echo  ====================================
 echo.
 

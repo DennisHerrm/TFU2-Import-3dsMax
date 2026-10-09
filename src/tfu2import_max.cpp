@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - der Max-Teil: Skelett, Meshes, Skin, Materialien,
+//  TFU Import - der Max-Teil: Skelett, Meshes, Skin, Materialien,
 //  Animation.
 //
 //  Raum: das Spiel rechnet in Metern mit Y oben und Zeilenvektoren
@@ -97,7 +97,7 @@ void SchreibeEinstellung(const std::wstring& schluessel, const std::wstring& wer
     m[schluessel] = wert;
     FILE* f = _wfopen((Ablage() + L"\\einstellungen.txt").c_str(), L"wb");
     if (f == nullptr) return;
-    std::fputs("# TFU2 Import - Einstellungen\r\n", f);
+    std::fputs("# TFU Import - Einstellungen\r\n", f);
     for (const auto& kv : m) {
         const std::string z = tfu::Utf8(kv.first) + "=" + tfu::Utf8(kv.second) + "\r\n";
         std::fwrite(z.data(), 1, z.size(), f);
@@ -115,7 +115,7 @@ void LogNeu(const char* titel) {
     if (g_log != nullptr) {
         SYSTEMTIME st;
         GetLocalTime(&st);
-        std::fprintf(g_log, "TFU2 Import %ls  %04d-%02d-%02d %02d:%02d:%02d  Max %d\r\n%s\r\n", TFU2IMPORT_VERSION_STR, st.wYear,
+        std::fprintf(g_log, "TFU Import %ls  %04d-%02d-%02d %02d:%02d:%02d  Max %d\r\n%s\r\n", TFU2IMPORT_VERSION_STR, st.wYear,
                      st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, MAX_RELEASE, titel);
         std::fflush(g_log);
     }
@@ -1122,7 +1122,7 @@ bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, i
     bool abgebrochen = false;
     theHold.Suspend();
     ip->DisableSceneRedraw();
-    ip->ProgressStart(_T("TFU2: loading animations into the timeline"), TRUE, KeinFortschritt, nullptr);
+    ip->ProgressStart(_T("TFU: loading animations into the timeline"), TRUE, KeinFortschritt, nullptr);
     SuspendAnimate();
     for (size_t i = 0; i < z.knochen.size() && !abgebrochen; ++i) {
         const Bein& b = z.knochen[i];
@@ -1282,7 +1282,7 @@ int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen) {
         std::string fehler;
         if (!g.Lies(roh, fehler) || !m.Lies(g, fehler)) {
             Log("FEHLER %s", fehler.c_str());
-            if (!ohneRueckfragen) MessageBoxW(GetCOREInterface()->GetMAXHWnd(), tfu::Breit(fehler).c_str(), L"TFU2 Import", MB_ICONERROR);
+            if (!ohneRueckfragen) MessageBoxW(GetCOREInterface()->GetMAXHWnd(), tfu::Breit(fehler).c_str(), L"TFU Import", MB_ICONERROR);
             return 0;
         }
         Interface* ip = GetCOREInterface();

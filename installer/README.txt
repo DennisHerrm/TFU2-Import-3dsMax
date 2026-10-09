@@ -1,4 +1,4 @@
-TFU2 Import for 3ds Max 2016-2027
+TFU Import for 3ds Max 2016-2027
 =================================
 
 Characters and animations from Star Wars: The Force Unleashed and
@@ -9,9 +9,9 @@ Install
   2. Close 3ds Max.
   3. Double-click Install.bat. Windows asks for admin rights (install for
      all users). If you decline, the plugin is installed for you only.
-  4. Start 3ds Max: menu "TFU2 Tool" -> "Import TFU2" and "TFU2 Animations".
+  4. Start 3ds Max: menu "TFU Tool" -> "Import TFU" and "TFU Animations".
 
-  Alternative: use TFU2Import-<version>-Setup.exe from the release page.
+  Alternative: use TFUImport-<version>-Setup.exe from the release page.
 
 Requirements
   - Windows 10/11, 64-bit, 3ds Max 2016 to 2027

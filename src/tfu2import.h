@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - Plugin-Kopf
+//  TFU Import - Plugin-Kopf
 //
 //  Figuren aus Star Wars: The Force Unleashed II direkt aus den
 //  Spielpaketen (LevelPacks\pak*.lp) nach 3ds Max: Skelett, Meshes,
@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#define TFU2IMPORT_VERSION      300
-#define TFU2IMPORT_VERSION_STR  _T("0.3.0")
+#define TFU2IMPORT_VERSION      301
+#define TFU2IMPORT_VERSION_STR  _T("0.3.1")
 
 // Einmalig gezogen, nie wieder aendern.
 #define TFU2IMPORT_SCENE_CLASS_ID  Class_ID(0x4c1e7b93, 0x2a6f0d58)

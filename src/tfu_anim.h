@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - Animationen (.animations)
+//  TFU Import - Animationen (.animations)
 //
 //  Huelle: "R2D2pack" (mit Eintragsliste) oder direkt "R2D2mult";
 //  darin ein Block "mina". Ab mina+0x40 (der Basis) liegen die

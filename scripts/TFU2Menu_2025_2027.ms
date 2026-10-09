@@ -19,16 +19,16 @@
     (
       try
       (
-        local mnuSub = mgr.mainMenuBar.CreateSubMenu sSubMenuGuid "TFU2 Tool"
+        local mnuSub = mgr.mainMenuBar.CreateSubMenu sSubMenuGuid "TFU Tool"
         if (mnuSub != undefined) then
         (
-          mnuSub.CreateAction sActionGuid 647394 "TFU2Import_Open`TFU2 Tool"
-          mnuSub.CreateAction sAnimGuid 647394 "TFU2Import_Anim`TFU2 Tool"
+          mnuSub.CreateAction sActionGuid 647394 "TFU2Import_Open`TFU Tool"
+          mnuSub.CreateAction sAnimGuid 647394 "TFU2Import_Anim`TFU Tool"
         )
         else
-          format "[TFU2] CreateSubMenu returned undefined - GUID already taken?\n"
+          format "[TFU] CreateSubMenu returned undefined - GUID already taken?\n"
       )
-      catch (format "[TFU2] menu could not be created: %\n" (getCurrentException()))
+      catch (format "[TFU] menu could not be created: %\n" (getCurrentException()))
     )
   )
 

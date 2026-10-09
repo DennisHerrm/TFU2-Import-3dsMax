@@ -6,8 +6,8 @@ REM  Aufruf:  installer\BAUE_RELEASE.bat [ordner mit <jahr>\TFU2Import.dlu]
 REM           ohne Angabe: output\ (von BUILD.bat)
 REM
 REM  Ergebnis in dist\:
-REM    TFU2Import-<version>-Setup.exe   Installer (Inno Setup 6)
-REM    TFU2Import-<version>.zip         Paket + Install.bat/Uninstall.bat/README.txt
+REM    TFUImport-<version>-Setup.exe   Installer (Inno Setup 6)
+REM    TFUImport-<version>.zip         Paket + Install.bat/Uninstall.bat/README.txt
 REM    SHA256SUMS.txt
 REM
 REM  Signieren (optional): ist TFU2_SIGNTOOL gesetzt, wird damit jede .dlu und
@@ -29,7 +29,7 @@ set "REDIST=%WURZEL%\installer\redist\vc_redist.x64.exe"
 for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "([xml](Get-Content -Raw '%WURZEL%\package\TFU2Import\PackageContents.xml')).ApplicationPackage.AppVersion"`) do set "VER=%%v"
 if not defined VER (echo FEHLER: Version nicht lesbar & exit /b 1)
 echo.
-echo  TFU2 Import %VER% - Release bauen
+echo  TFU Import %VER% - Release bauen
 echo  Quelle der Plugins: %QUELLE%
 echo.
 
@@ -84,18 +84,18 @@ echo  vc_redist.x64.exe: Microsoft-Signatur gueltig.
 REM ---- Setup.exe ------------------------------------------------------------
 "%ISCC%" /Q /DAppVer=%VER% "%WURZEL%\installer\TFU2Import.iss"
 if errorlevel 1 (echo FEHLER: Inno Setup & exit /b 1)
-if defined TFU2_SIGNTOOL %TFU2_SIGNTOOL% "%DIST%\TFU2Import-%VER%-Setup.exe" || (echo FEHLER beim Signieren & exit /b 1)
+if defined TFU2_SIGNTOOL %TFU2_SIGNTOOL% "%DIST%\TFUImport-%VER%-Setup.exe" || (echo FEHLER beim Signieren & exit /b 1)
 
 REM ---- ZIP ------------------------------------------------------------------
 copy /Y "%WURZEL%\installer\Install.bat" "%DIST%\paket\" >nul
 copy /Y "%WURZEL%\installer\Uninstall.bat" "%DIST%\paket\" >nul
 copy /Y "%WURZEL%\installer\README.txt" "%DIST%\paket\" >nul
-if exist "%DIST%\TFU2Import-%VER%.zip" del "%DIST%\TFU2Import-%VER%.zip"
-powershell -NoProfile -Command "Compress-Archive -Path '%DIST%\paket\*' -DestinationPath '%DIST%\TFU2Import-%VER%.zip'"
+if exist "%DIST%\TFUImport-%VER%.zip" del "%DIST%\TFUImport-%VER%.zip"
+powershell -NoProfile -Command "Compress-Archive -Path '%DIST%\paket\*' -DestinationPath '%DIST%\TFUImport-%VER%.zip'"
 if errorlevel 1 (echo FEHLER: ZIP & exit /b 1)
 
 REM ---- Pruefsummen fuer die Release-Seite -----------------------------------
-powershell -NoProfile -Command "Get-ChildItem '%DIST%\TFU2Import-%VER%*' | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content -Encoding ascii '%DIST%\SHA256SUMS.txt'"
+powershell -NoProfile -Command "Get-ChildItem '%DIST%\TFUImport-%VER%*' | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content -Encoding ascii '%DIST%\SHA256SUMS.txt'"
 echo.
 echo  FERTIG:
 type "%DIST%\SHA256SUMS.txt"

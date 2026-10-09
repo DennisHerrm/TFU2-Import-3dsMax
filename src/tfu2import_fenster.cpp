@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - das Figurenfenster (modal)
+//  TFU Import - das Figurenfenster (modal)
 //
 //  Aufbau und Gestaltung wie beim SWBF2 Import: Spielordner oben,
 //  Statuszeile, Reiter nach Figurenart, Suche, selbst gezeichnete
@@ -416,7 +416,7 @@ void Lade(Fenster& f) {
                       std::to_wstring(f.katalog->figuren.size()) +
                       L" models, " + std::to_wstring(f.katalog->animationen.size()) + L" animations in " +
                       std::to_wstring(f.pakete->PaketZahl()) + L" packs.");
-        SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR + L"  \u00B7  " +
+        SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU Import ") + TFU2IMPORT_VERSION_STR + L"  \u00B7  " +
                                         std::to_wstring(f.katalog->figuren.size()) + L" models").c_str());
     }
     FuelleListe(f);
@@ -460,13 +460,13 @@ void Einrichten(Fenster& f) {
     SendDlgItemMessageW(f.h, IDC_LISTE, LB_SETITEMHEIGHT, 0, EintragsHoehe(f.h));
     tfu2ui::DunkleTitelleiste(f.h, f.pal.dunkel);
     if (f.pal.dunkel) SetWindowTheme(GetDlgItem(f.h, IDC_LISTE), L"DarkMode_Explorer", nullptr);
-    SetWindowTextW(f.h, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR).c_str());
+    SetWindowTextW(f.h, (std::wstring(L"TFU Import ") + TFU2IMPORT_VERSION_STR).c_str());
     {
         const int innen = std::max(3, f.zeilenHoehe / 4);
         SendDlgItemMessageW(f.h, IDC_SUCHE, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(innen, innen));
     }
     SendDlgItemMessageW(f.h, IDC_SUCHE, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Filter by name, e.g.  vader  or  kota"));
-    SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR).c_str());
+    SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU Import ") + TFU2IMPORT_VERSION_STR).c_str());
     MerkeAnker(f);
     f.kategorie = std::clamp(_wtoi(LiesEinstellung(L"Kategorie").c_str()), 0, kKategorien - 1);
     f.statisch = LiesEinstellung(L"StatischeTeile") == L"1";

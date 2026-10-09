@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - Modell aus einer GTO
+//  TFU Import - Modell aus einer GTO
 //
 //  Aufbau einer Figur (gemessen an playerstarkillermcquarrie.gto):
 //    Info                 Plattform, Version

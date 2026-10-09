@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - Zugriff auf die Spielpakete
+//  TFU Import - Zugriff auf die Spielpakete
 //
 //  Das Spiel legt seine Daten in LevelPacks\pak0.lp .. pak3.lp ab.
 //  Das sind gewoehnliche ZIP-Archive (Signatur "PK\3\4"), jede

@@ -1,6 +1,6 @@
 @echo off
 REM ================================================================
-REM  BUILD.bat - TFU2 Import bauen und installieren.
+REM  BUILD.bat - TFU Import bauen und installieren.
 REM    BUILD.bat          alle Jahrgaenge 2016-2027 mit installiertem SDK
 REM    BUILD.bat 2026     nur diesen
 REM  Protokoll: BUILD.log
@@ -19,7 +19,7 @@ set "OHNEPAUSE=%TFU2_KEIN_PAUSE%"
 echo BUILD.bat  %DATE% %TIME%> "%LOG%"
 echo.
 echo ================================================================
-echo   TFU2 Import - bauen und installieren
+echo   TFU Import - bauen und installieren
 echo ================================================================
 
 where cmake >nul 2>&1

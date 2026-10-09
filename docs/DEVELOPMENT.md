@@ -1,4 +1,4 @@
-# TFU2 Import – development notes
+# TFU Import – development notes
 
 How the plugin reads *Star Wars: The Force Unleashed II* and *The Force Unleashed*
 (PC) and how the 3ds Max side is built. Everything here was worked out from the game data itself.

@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - GTO-Leser
+//  TFU Import - GTO-Leser
 //
 //  Die Modelle (.gto) sind Tweak-GTO, Version 3, gzip-gepackt -
 //  aber in einer GEKUERZTEN Fassung: die Koepfe sind 16-Bit-Felder

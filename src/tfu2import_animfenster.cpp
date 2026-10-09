@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - das Animationsfenster (modal)
+//  TFU Import - das Animationsfenster (modal)
 //
 //  Aufbau wie beim SWBF2 Import: oben Figur, Auswahl und Suche, dann
 //  die Clipliste mit Kopfzeile (virtuell, LBS_NODATA), Statuszeile,
@@ -104,7 +104,7 @@ bool LadeSpiel(Fenster& f) {
         f.katalog = nullptr;
         f.spiel = 0;
         Status(f, std::wstring(L"No game folder for ") + (nr == 1 ? L"TFU 1" : L"TFU 2") +
-                      L" yet - open the character window (TFU2 Import), switch to it and pick the game folder.", true);
+                      L" yet - open the character window (TFU Import), switch to it and pick the game folder.", true);
         return false;
     }
     f.spiel = nr;
@@ -275,7 +275,7 @@ void AlleLaden(Fenster& f) {
         wchar_t frage[400];
         swprintf(frage, 400, L"Load %zu clips one after another onto %ls (gap %d frames)?\n\nThe timeline starts at frame 0 with the bind pose.",
                  f.sichtbar.size(), sf ? tfu::Breit(sf->name).c_str() : L"the skeleton", abstand);
-        if (MessageBoxW(f.h, frage, L"TFU2 Animations", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+        if (MessageBoxW(f.h, frage, L"TFU Animations", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
     }
     std::vector<std::string> pfade;
     for (size_t i : f.sichtbar) pfade.push_back(f.katalog->animationen[i].pfad);
@@ -371,7 +371,7 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             for (int id : { IDC_A_FIGUR, IDC_A_ZEIGE, IDC_A_SEQUENZ }) SetWindowTheme(GetDlgItem(h, id), L"DarkMode_CFD", nullptr);
         }
         SendDlgItemMessageW(h, IDC_A_LISTE, LB_SETITEMHEIGHT, 0, f->zeilenHoehe + 6);
-        SetWindowTextW(h, (std::wstring(L"TFU2 Animations ") + TFU2IMPORT_VERSION_STR).c_str());
+        SetWindowTextW(h, (std::wstring(L"TFU Animations ") + TFU2IMPORT_VERSION_STR).c_str());
         const std::wstring abstand = LiesEinstellung(L"Abstand");
         SetDlgItemInt(h, IDC_A_ABSTAND, abstand.empty() ? 10 : static_cast<UINT>(_wtoi(abstand.c_str())), FALSE);
         f->notiz = LiesEinstellung(L"Notizspur") != L"0";

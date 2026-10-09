@@ -14,7 +14,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 IDD_FIGUREN DIALOGEX 0, 0, 440, 306
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN
 EXSTYLE WS_EX_CONTROLPARENT
-CAPTION "TFU2 Import"
+CAPTION "TFU Import"
 FONT 9, "Segoe UI", 400, 0, 0x0
 BEGIN
     PUSHBUTTON      "TFU 1", IDC_SPIEL1, 7, 6, 40, 15, BS_OWNERDRAW | WS_TABSTOP | WS_GROUP
@@ -47,7 +47,7 @@ END
 IDD_ANIMATIONEN DIALOGEX 0, 0, 440, 314
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN
 EXSTYLE WS_EX_CONTROLPARENT
-CAPTION "TFU2 Animations"
+CAPTION "TFU Animations"
 FONT 9, "Segoe UI", 400, 0, 0x0
 BEGIN
     LTEXT           "Character", -1, 8, 10, 38, 10
@@ -73,8 +73,8 @@ BEGIN
 END
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,3,0,0
- PRODUCTVERSION 0,3,0,0
+ FILEVERSION 0,3,1,0
+ PRODUCTVERSION 0,3,1,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS VOS_NT_WINDOWS32
@@ -86,12 +86,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "DH"
-            VALUE "FileDescription", "TFU2 Import - Star Wars The Force Unleashed II for 3ds Max"
-            VALUE "FileVersion", "0.3.0"
+            VALUE "FileDescription", "TFU Import - Star Wars The Force Unleashed I + II for 3ds Max"
+            VALUE "FileVersion", "0.3.1"
             VALUE "InternalName", "TFU2Import"
             VALUE "OriginalFilename", "TFU2Import.dlu"
-            VALUE "ProductName", "TFU2 Import"
-            VALUE "ProductVersion", "0.3.0"
+            VALUE "ProductName", "TFU Import"
+            VALUE "ProductVersion", "0.3.1"
         END
     END
     BLOCK "VarFileInfo"

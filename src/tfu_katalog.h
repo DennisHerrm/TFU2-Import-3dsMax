@@ -1,5 +1,5 @@
 // ============================================================
-//  TFU2 Import - Katalog: was steht im Spiel zur Auswahl
+//  TFU Import - Katalog: was steht im Spiel zur Auswahl
 //
 //  Figuren:  jede .gto unter .../Characters/... ausser den LOD-Stufen
 //            (_LOD1 usw.). Die zugehoerige *.actor.xml (falls eine

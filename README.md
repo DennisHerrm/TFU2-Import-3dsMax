@@ -1,4 +1,4 @@
-# TFU2 Import for 3ds Max
+# TFU Import for 3ds Max
 
 Import characters and animations from **Star Wars: The Force Unleashed** and
 **Star Wars: The Force Unleashed II** (PC) straight from the game files into 3ds Max:
@@ -10,17 +10,19 @@ skeleton, skinned meshes, materials with textures, and animations.
 > The Walt Disney Company; 3ds Max is a trademark of Autodesk. **No game data is
 > included** – the plugin reads the files of your own installation of the game.
 
-Version 0.3.0 – for **3ds Max 2016 to 2027** (Windows 10/11, 64-bit).
+Version 0.3.1 – for **3ds Max 2016 to 2027** (Windows 10/11, 64-bit).
+Up to 0.3.0 the plugin was called *TFU2 Import* (menu *TFU2 Tool*); updating replaces
+it, settings are kept.
 
 ## Install
 
 1. Close 3ds Max.
-2. Download `TFU2Import-<version>-Setup.exe` from the
+2. Download `TFUImport-<version>-Setup.exe` from the
    [Releases](https://github.com/DennisHerrm/TFU2-Import-3dsMax/releases) page and run it
    (for all users, or only for you). It installs the Microsoft Visual C++ runtime if
    it is missing.
    *Or* download the ZIP, extract it and run `Install.bat`.
-3. Start 3ds Max – the menu **TFU2 Tool** is there.
+3. Start 3ds Max – the menu **TFU Tool** is there.
 
 The files are not code-signed yet, so Windows SmartScreen may warn ("Windows protected
 your PC" → *More info* → *Run anyway*). `SHA256SUMS.txt` on the release page lets you
@@ -32,15 +34,15 @@ Steam libraries.
 
 ## Use
 
-Menu **TFU2 Tool** with two windows (or *File → Import* and pick `SWTFU.exe` /
+Menu **TFU Tool** with two windows (or *File → Import* and pick `SWTFU.exe` /
 `SWTFU2.exe` or one of the game's `LevelPacks\*.lp`):
 
-* **Import TFU2** – the character window. **TFU 1 / TFU 2** at the top switches
+* **Import TFU** – the character window. **TFU 1 / TFU 2** at the top switches
   between the two games; each keeps its own game folder, found automatically (Steam
   libraries) or picked with *Browse*. Tabs *Starkiller*, *Characters*,
   *Creatures + droids*, *Other*, *All*; *Static parts* also lists rigid pieces without
   a skeleton. Double-click or *Import*. Characters face the front view (−Y).
-* **TFU2 Animations** – pick the character in the scene, then a clip. The window
+* **TFU Animations** – pick the character in the scene, then a clip. The window
   uses the game the character comes from, so TFU 1 and TFU 2 characters can share a
   scene:
   * *Own clips* – what the game assigns to this character (its chore sets and its

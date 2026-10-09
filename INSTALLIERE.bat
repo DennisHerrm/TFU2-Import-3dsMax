@@ -39,7 +39,7 @@ copy /Y "%~dp0scripts\TFU2Menu_2016_2024.ms" "%DEST%\Contents\Post-Start-Up_Scri
 echo       %ZAHL% Max-Fassung(en) installiert, %GESPERRT% gesperrt, nach:
 echo       %DEST%
 echo.
-echo In 3ds Max (neu starten): Menue "TFU2 Tool" -^> "Import TFU2" / "TFU2 Animations"
+echo In 3ds Max (neu starten): Menue "TFU Tool" -^> "Import TFU" / "TFU Animations"
 echo oder Datei -^> Importieren -^> SWTFU.exe bzw. SWTFU2.exe des Spiels. Oben im Fenster: TFU 1 / TFU 2.
 :ende
 if not "%TFU2_KEIN_PAUSE%"=="1" pause
