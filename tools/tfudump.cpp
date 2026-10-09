@@ -8,6 +8,9 @@
 //    tfudump <spielordner> checkmodels          alle Modelle lesen
 //    tfudump <spielordner> materials <name>     Materialien und Texturen einer Figur
 //    tfudump <spielordner> texture <pfad> <ziel> [normal]
+//    tfudump <spielordner> stretch <name>       eigene Clips, die Knochenlaengen > 15 % aendern
+//    tfudump <spielordner> animhash             Pruefsumme ueber alle dekodierten Werte
+//  Spielordner: TFU2 oder TFU1 (wird erkannt).
 //
 //  Dieselben Quellen wie das Plugin - was hier stimmt, stimmt dort.
 // ============================================================
@@ -116,6 +119,30 @@ int PruefeAnims(const Pakete& p, const Katalog& k) {
     return schlecht == 0 ? 0 : 2;
 }
 
+// Pruefsumme ueber alle dekodierten Werte (Vergleich vor/nach Decoder-Aenderungen).
+int AnimHash(const Pakete& p, const Katalog& k) {
+    uint64_t h = 1469598103934665603ull;
+    auto misch = [&](const void* q, size_t n) {
+        const uint8_t* b = static_cast<const uint8_t*>(q);
+        for (size_t i = 0; i < n; ++i) { h ^= b[i]; h *= 1099511628211ull; }
+    };
+    size_t ok = 0;
+    for (const AnimEintrag& a : k.animationen) {
+        std::vector<uint8_t> roh;
+        std::string fehler;
+        AnimClip c;
+        if (!p.Lies(a.pfad, roh, fehler) || !c.Lies(roh, fehler)) continue;
+        ++ok;
+        for (const AnimSpur& s : c.spuren) {
+            misch(s.keys.data(), s.keys.size() * sizeof(s.keys[0]));
+            misch(s.t.data(), s.t.size() * sizeof(float));
+            misch(s.r.data(), s.r.size() * sizeof(float));
+        }
+    }
+    std::printf("ANIMHASH %016llx over %zu clips\n", static_cast<unsigned long long>(h), ok);
+    return 0;
+}
+
 int PruefeModelle(const Pakete& p) {
     size_t ok = 0, schlecht = 0, mitSkelett = 0, meshes = 0;
     for (const PakEintrag& e : p.Eintraege()) {
@@ -174,6 +201,7 @@ int wmain(int argc, wchar_t** argv) {
     if (befehl == "anim") return Anim_(p, arg3, argc > 4 ? _wtoi(argv[4]) : 3);
     if (befehl == "checkanims") return PruefeAnims(p, k);
     if (befehl == "checkmodels") return PruefeModelle(p);
+    if (befehl == "animhash") return AnimHash(p, k);
     if (befehl == "fit") {
         // Welche Animationen passen zum Skelett einer Figur? (derselbe Filter wie im Fenster)
         const FigurEintrag* f = FindeFigur(k, arg3);
@@ -206,6 +234,48 @@ int wmain(int argc, wchar_t** argv) {
         for (const std::string& a : f->actors) std::printf("ACTOR %s\n", a.c_str());
         return 0;
     }
+    if (befehl == "stretch") {
+        // Eigene Clips einer Figur: weicht eine Knochenlaenge (Translation der Spur)
+        // um mehr als 15 % von der Bindepose ab? Dann passt der Clip nicht zum Rig.
+        const FigurEintrag* f = FindeFigur(k, arg3);
+        if (f == nullptr) { std::printf("ERROR no such character\n"); return 1; }
+        std::vector<uint8_t> roh;
+        GtoDatei g;
+        Modell m;
+        if (!p.Lies(f->gto, roh, fehler) || !g.Lies(roh, fehler) || !m.Lies(g, fehler)) { std::printf("ERROR %s\n", fehler.c_str()); return 1; }
+        std::map<uint32_t, float> laenge;
+        for (const Knochen& b : m.knochen) {
+            const float l = std::sqrt(b.lokal[12] * b.lokal[12] + b.lokal[13] * b.lokal[13] + b.lokal[14] * b.lokal[14]);
+            if (l > 0.03f && b.eltern >= 0 && b.name.find("root") == std::string::npos && b.name.find("hips") == std::string::npos &&
+                b.name.find("Weapon") == std::string::npos && b.name.find("collision") == std::string::npos &&
+                b.name.find("holster") == std::string::npos && b.name.find("Jiggle") == std::string::npos) laenge[b.crc] = l;
+        }
+        const auto& alle = k.AnimCrcs(p);
+        const std::vector<uint32_t> sk = ModellCrcs(p, f->gto);
+        size_t gut = 0, schlecht = 0;
+        for (size_t i : k.EigeneAnimationen(p, *f)) {
+            if (!PasstZu(alle[i], sk)) continue;
+            AnimClip c;
+            if (!p.Lies(k.animationen[i].pfad, roh, fehler) || !c.Lies(roh, fehler)) continue;
+            float schlimm = 0.0f;
+            uint32_t welcher = 0;
+            for (const AnimSpur& sp : c.spuren) {
+                const auto it = laenge.find(sp.crc);
+                if (it == laenge.end() || !sp.hatT) continue;
+                for (size_t q = 0; q + 2 < sp.t.size(); q += 3) {
+                    const float l = std::sqrt(sp.t[q] * sp.t[q] + sp.t[q + 1] * sp.t[q + 1] + sp.t[q + 2] * sp.t[q + 2]);
+                    const float d = std::fabs(l / it->second - 1.0f);
+                    if (d > schlimm) { schlimm = d; welcher = sp.crc; }
+                }
+            }
+            std::string bname;
+            for (const Knochen& b : m.knochen) if (b.crc == welcher) bname = b.name;
+            if (schlimm > 0.15f) { ++schlecht; std::printf("STRETCH %3.0f%% %-20s %s\n", schlimm * 100.0f, bname.c_str(), k.animationen[i].pfad.c_str()); }
+            else ++gut;
+        }
+        std::printf("CHARACTER %s  ok %zu  stretched %zu\n", f->name.c_str(), gut, schlecht);
+        return 0;
+    }
     if (befehl == "materials") {
         const FigurEintrag* f = FindeFigur(k, arg3);
         if (f == nullptr) { std::printf("ERROR no such character\n"); return 1; }
@@ -214,7 +284,7 @@ int wmain(int argc, wchar_t** argv) {
         Modell m;
         if (!p.Lies(f->gto, roh, fehler) || !g.Lies(roh, fehler) || !m.Lies(g, fehler)) { std::printf("ERROR %s\n", fehler.c_str()); return 1; }
         std::vector<std::string> prot;
-        LoeseMaterialien(p, *f, m.materialien, &prot);
+        LoeseMaterialien(p, *f, m.materialien, &prot, &m.materialDaten);
         std::printf("ACTOR %s\n", f->actor.c_str());
         for (const std::string& z : prot) std::printf("MAT %s\n", z.c_str());
         return 0;

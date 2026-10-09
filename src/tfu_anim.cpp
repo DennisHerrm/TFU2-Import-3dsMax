@@ -98,6 +98,12 @@ bool Dekodiere(const std::vector<uint8_t>& d, size_t o, AnimSpur& s, std::string
             }
         }
     } else {
+        // Typen 8-15: Maske 1xyz, Floats nur fuer die gesetzten Kanaele (fehlende = 0).
+        // TFU2 nutzt fuer die Translation nur 15 (xyz), TFU1 auch Rotationen
+        // mit Teilmasken (Fahrzeuge, Zwischensequenzen).
+        int tch[3], rch[3], ntc = 0, nrc = 0;
+        if (tn & 8) Kanaele(tn, tch, ntc);
+        if (rn & 8) Kanaele(rn, rch, nrc);
         float skal = 0.0f;
         if (s.hatT && tn == 2) { skal = Hole<float>(d, p) / 32767.0f; p += 4; }
         for (size_t k = 0; k < nk; ++k) {
@@ -105,7 +111,7 @@ bool Dekodiere(const std::vector<uint8_t>& d, size_t o, AnimSpur& s, std::string
                 float* t = &s.t[k * 3];
                 if (tn == 1) { for (int j = 0; j < 3; ++j) t[j] = Hole<float>(d, p + 4u * static_cast<size_t>(j)); p += 16; }
                 else if (tn == 2) { for (int j = 0; j < 3; ++j) t[j] = Hole<int16_t>(d, p + 2u * static_cast<size_t>(j)) * skal; p += 6; }
-                else if (tn & 8) { for (int j = 0; j < 3; ++j) t[j] = Hole<float>(d, p + 4u * static_cast<size_t>(j)); p += 12; }
+                else if (tn & 8) { for (int j = 0; j < ntc; ++j) { t[tch[j]] = Hole<float>(d, p); p += 4; } }
                 else { fehler = "unknown translation type " + std::to_string(tn); return false; }
             }
             if (s.hatR) {
@@ -113,6 +119,7 @@ bool Dekodiere(const std::vector<uint8_t>& d, size_t o, AnimSpur& s, std::string
                 if (rn == 1) { for (int j = 0; j < 4; ++j) q[j] = Hole<float>(d, p + 4u * static_cast<size_t>(j)); p += 16; }
                 else if (rn == 2) { for (int j = 0; j < 4; ++j) q[j] = Hole<int16_t>(d, p + 2u * static_cast<size_t>(j)) / 32767.0f; p += 8; }
                 else if (rn == 3) { for (int j = 0; j < 3; ++j) q[j] = Hole<int16_t>(d, p + 2u * static_cast<size_t>(j)) / 32767.0f; MitW(q); p += 6; }
+                else if (rn & 8) { for (int j = 0; j < nrc; ++j) { q[rch[j]] = Hole<float>(d, p); p += 4; } MitW(q); }
                 else { fehler = "unknown rotation type " + std::to_string(rn); return false; }
                 const float l = std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
                 if (l > 1e-6f) for (int j = 0; j < 4; ++j) q[j] /= l;

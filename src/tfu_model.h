@@ -57,6 +57,8 @@ struct Modell {
     std::vector<Knochen> knochen;
     std::vector<Teilmesh> meshes;
     std::vector<std::string> materialien;
+    // TFU1: je Material ein eingebettetes <materialDefinition>-XML (Data), sonst leer
+    std::vector<std::string> materialDaten;
 
     bool Lies(const GtoDatei& gto, std::string& fehler);
     int KnochenNachName(const std::string& n) const;

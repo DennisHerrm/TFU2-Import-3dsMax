@@ -18,7 +18,7 @@
 ; ============================================================================
 
 #ifndef AppVer
-  #define AppVer "0.2.1"
+  #define AppVer "0.3.0"
 #endif
 #ifndef PaketDir
   #define PaketDir "..\dist\paket\TFU2Import"

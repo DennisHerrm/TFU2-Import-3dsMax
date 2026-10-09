@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#define TFU2IMPORT_VERSION      201
-#define TFU2IMPORT_VERSION_STR  _T("0.2.1")
+#define TFU2IMPORT_VERSION      300
+#define TFU2IMPORT_VERSION_STR  _T("0.3.0")
 
 // Einmalig gezogen, nie wieder aendern.
 #define TFU2IMPORT_SCENE_CLASS_ID  Class_ID(0x4c1e7b93, 0x2a6f0d58)
@@ -37,8 +37,15 @@ void SchreibeEinstellung(const std::wstring& schluessel, const std::wstring& wer
 void LogNeu(const char* titel);
 void Log(const char* format, ...);
 
-// Spiel laden (Pakete + Katalog), einmal je Ordner.
+// Spiel laden (Pakete + Katalog), einmal je Ordner; TFU1 und TFU2 bleiben
+// nebeneinander geladen. Leerer Ordner = der des aktiven Spiels.
 bool Spiel(const std::wstring& ordner, const tfu::Pakete*& pakete, const tfu::Katalog*& katalog, std::string& fehler);
+// Dasselbe ueber die Nummer (1 = TFU, 2 = TFU II) und den gemerkten Ordner.
+bool SpielNr(int spiel, const tfu::Pakete*& pakete, const tfu::Katalog*& katalog, std::string& fehler);
+// Einstellungsschluessel des Ordners ("Spielordner1" / "Spielordner") und das
+// im Figurenfenster gewaehlte Spiel (Einstellung "Spiel", Vorgabe 2).
+std::wstring SpielordnerSchluessel(int spiel);
+int AktivesSpiel();
 
 struct ImportOptionen {
     bool texturen = true;
@@ -52,6 +59,7 @@ bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const Imp
 struct SzenenFigur {
     std::string id, gto, name;
     size_t knochen = 0;
+    int spiel = 2;             // tfu2_spiel der Knoten (aeltere Importe: 2)
 };
 // Gewaehlte Figur zuerst, sonst die zuletzt importierte.
 std::vector<SzenenFigur> FigurenInSzene();

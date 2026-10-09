@@ -10,6 +10,16 @@
 //  Pfade werden klein geschrieben und mit '/' gefuehrt: die
 //  Materialdateien nennen ihre Texturen klein ("game/disc/..."),
 //  im Archiv stehen sie gemischt ("Game/Disc/...").
+//
+//  TFU1 (SWTFU.exe) legt je Level, Kostuem und Menue eine eigene
+//  LevelPacks\*.lp im "kaPA"-Format ab. Dieselbe Datei steckt oft in
+//  vielen Paketen; die erste gewinnt (sie sind gleich).
+//    Kopf 0x50 Bytes, u32: [2] Eintraege, [6] Zusatzkopf (Levelname),
+//      [7] Groesse der Namenstabelle, [8] Versatztabelle, [12] Datenbeginn
+//    Namenstabelle ab 0x50 + [6], danach (16-ausgerichtet) je Eintrag
+//      64 Bytes: +0x04 Typ-Hash, +0x14 Namensversatz, +0x28 Groesse
+//    Versatztabelle je Eintrag 16 Bytes: u32 Index, u32 Versatz ab [12]
+//  Nichts ist gepackt; GTO liegen ohne gzip vor.
 // ============================================================
 #pragma once
 
@@ -27,12 +37,15 @@ struct PakEintrag {
     uint64_t gepackt = 0;
     uint64_t groesse = 0;
     uint16_t methode = 0;      // 0 = gespeichert, 8 = deflate
+    bool kapa = false;         // TFU1: kopf ist schon der Datenbeginn
 };
 
 class Pakete {
 public:
-    // Spielordner (der mit SWTFU2.exe) oder direkt LevelPacks.
+    // Spielordner (der mit SWTFU2.exe bzw. SWTFU.exe) oder direkt LevelPacks.
     bool Oeffne(const std::wstring& ordner, std::string& fehler);
+    // 1 = The Force Unleashed, 2 = The Force Unleashed II (0 = nichts offen)
+    int Spiel() const { return spiel_; }
 
     bool Hat(const std::string& pfad) const;
     const PakEintrag* Finde(const std::string& pfad) const;
@@ -48,6 +61,11 @@ public:
     static std::string Schluessel(const std::string& pfad);   // klein, '/'
 
 private:
+    bool OeffneZip(const std::wstring& lp, std::string& fehler);
+    bool OeffneKapa(const std::wstring& lp, std::string& fehler);
+    void Merke(const PakEintrag& e, bool spaeterGewinnt);
+
+    int spiel_ = 0;
     std::wstring ordner_;
     std::vector<std::wstring> dateien_;
     std::vector<PakEintrag> eintraege_;

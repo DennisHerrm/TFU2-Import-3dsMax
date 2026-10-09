@@ -7,7 +7,7 @@
 macroScript TFU2Import_Open
     category:"TFU2 Tool"
     buttonText:"Import TFU2"
-    toolTip:"Star Wars: The Force Unleashed II - import a character straight from the game"
+    toolTip:"Star Wars: The Force Unleashed I + II - import a character straight from the game"
 (
     on execute do
     (
@@ -25,7 +25,7 @@ macroScript TFU2Import_Open
 macroScript TFU2Import_Anim
     category:"TFU2 Tool"
     buttonText:"TFU2 Animations"
-    toolTip:"Star Wars: The Force Unleashed II - load animations onto the character in the scene"
+    toolTip:"Star Wars: The Force Unleashed I + II - load animations onto the character in the scene"
 (
     on execute do
     (

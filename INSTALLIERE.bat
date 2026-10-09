@@ -40,6 +40,6 @@ echo       %ZAHL% Max-Fassung(en) installiert, %GESPERRT% gesperrt, nach:
 echo       %DEST%
 echo.
 echo In 3ds Max (neu starten): Menue "TFU2 Tool" -^> "Import TFU2" / "TFU2 Animations"
-echo oder Datei -^> Importieren -^> pak0.lp bzw. SWTFU2.exe des Spiels.
+echo oder Datei -^> Importieren -^> SWTFU.exe bzw. SWTFU2.exe des Spiels. Oben im Fenster: TFU 1 / TFU 2.
 :ende
 if not "%TFU2_KEIN_PAUSE%"=="1" pause

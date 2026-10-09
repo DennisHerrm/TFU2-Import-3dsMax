@@ -136,24 +136,47 @@ void Log(const char* format, ...) {
 // ------------------------------------------------------------
 //  Spiel laden (einmal je Ordner)
 // ------------------------------------------------------------
+std::wstring SpielordnerSchluessel(int spiel) { return spiel == 1 ? L"Spielordner1" : L"Spielordner"; }
+
+int AktivesSpiel() { return LiesEinstellung(L"Spiel") == L"1" ? 1 : 2; }
+
 bool Spiel(const std::wstring& ordner, const tfu::Pakete*& pakete, const tfu::Katalog*& katalog, std::string& fehler) {
-    static std::unique_ptr<tfu::Pakete> p;
-    static std::unique_ptr<tfu::Katalog> k;
-    static std::wstring geladen;
+    // Je Spiel ein Satz (TFU1 und TFU2 duerfen beide offen sein).
+    struct Geladen {
+        std::unique_ptr<tfu::Pakete> p;
+        std::unique_ptr<tfu::Katalog> k;
+        std::wstring ordner;
+    };
+    static Geladen satz[2];
     std::wstring o = ordner;
-    if (o.empty()) o = LiesEinstellung(L"Spielordner");
-    if (!p || _wcsicmp(o.c_str(), geladen.c_str()) != 0) {
-        auto np = std::make_unique<tfu::Pakete>();
-        auto nk = std::make_unique<tfu::Katalog>();
-        if (!np->Oeffne(o, fehler) || !nk->Baue(*np, fehler)) return false;
-        p = std::move(np);
-        k = std::move(nk);
-        geladen = o;
-        SchreibeEinstellung(L"Spielordner", p->Ordner());
+    if (o.empty()) o = LiesEinstellung(SpielordnerSchluessel(AktivesSpiel()));
+    for (Geladen& g : satz) {
+        if (g.p && _wcsicmp(o.c_str(), g.ordner.c_str()) == 0) {
+            pakete = g.p.get();
+            katalog = g.k.get();
+            return true;
+        }
     }
-    pakete = p.get();
-    katalog = k.get();
+    auto np = std::make_unique<tfu::Pakete>();
+    auto nk = std::make_unique<tfu::Katalog>();
+    if (!np->Oeffne(o, fehler) || !nk->Baue(*np, fehler)) return false;
+    Geladen& g = satz[np->Spiel() == 1 ? 0 : 1];
+    SchreibeEinstellung(SpielordnerSchluessel(np->Spiel()), np->Ordner());
+    g.p = std::move(np);
+    g.k = std::move(nk);
+    g.ordner = o;
+    pakete = g.p.get();
+    katalog = g.k.get();
     return true;
+}
+
+bool SpielNr(int spiel, const tfu::Pakete*& pakete, const tfu::Katalog*& katalog, std::string& fehler) {
+    const std::wstring o = LiesEinstellung(SpielordnerSchluessel(spiel));
+    if (o.empty()) {
+        fehler = spiel == 1 ? "no folder for The Force Unleashed yet" : "no folder for The Force Unleashed II yet";
+        return false;
+    }
+    return Spiel(o, pakete, katalog, fehler);
 }
 
 namespace {
@@ -388,6 +411,7 @@ Skelett BaueSkelett(Interface* ip, const tfu::Modell& m, const tfu::FigurEintrag
         // Wurzeln (Juno, Gorilla-Boss: root[0] und shape_0..n).
         node->SetUserPropString(MSTR(_T("tfu2_id")), M(id));
         node->SetUserPropString(MSTR(_T("tfu2_figur")), M(f.gto));
+        node->SetUserPropInt(MSTR(_T("tfu2_spiel")), f.spiel);
     }
     return s;
 }
@@ -685,6 +709,7 @@ bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const Imp
             tris += t.dreiecke.size() / 3;
             meshKnoten[i]->SetUserPropString(MSTR(_T("tfu2_id")), M(id));
             meshKnoten[i]->SetUserPropString(MSTR(_T("tfu2_figur")), M(f.gto));
+            meshKnoten[i]->SetUserPropInt(MSTR(_T("tfu2_spiel")), f.spiel);
         }
         Log("Mesh %2zu %-28s %-48s %6zu Vertices %6zu Dreiecke", i, t.name.c_str(), t.material.c_str(), t.Vertices(), t.dreiecke.size() / 3);
     }
@@ -701,7 +726,7 @@ bool ImportiereFigur(const tfu::Pakete& p, const tfu::FigurEintrag& f, const Imp
     size_t materialien = 0, texturen = 0;
     if (o.texturen) {
         std::vector<std::string> prot;
-        const auto saetze = tfu::LoeseMaterialien(p, f, m.materialien, &prot);
+        const auto saetze = tfu::LoeseMaterialien(p, f, m.materialien, &prot, &m.materialDaten);
         for (const std::string& z : prot) Log("Material %s", z.c_str());
         const std::wstring cache = Ablage() + L"\\textures";
         CreateDirectoryW(cache.c_str(), nullptr);
@@ -963,6 +988,9 @@ std::vector<SzenenFigur> FigurenInSzene() {
             f.id = id;
             f.gto = NodeProp(n, _T("tfu2_figur"));
             f.name = tfu::OhneEndung(tfu::Blatt(f.gto));
+            // Spiel der Figur; aeltere Importe ohne tfu2_spiel stammen aus TFU2.
+            const std::string sp = NodeProp(n, _T("tfu2_spiel"));
+            f.spiel = sp == "1" ? 1 : (sp.empty() && tfu::Klein(f.gto).compare(0, 5, "scum/") == 0 ? 1 : 2);
             it = nachId.emplace(id, aus.size()).first;
             aus.push_back(f);
         }
@@ -982,7 +1010,7 @@ bool WendeAnimationAn(const tfu::Pakete& p, const std::string& animPfad, bool wu
     Interface* ip = GetCOREInterface();
     LogNeu(("Animation " + animPfad).c_str());
     ZielSkelett z;
-    if (!HoleSkelett(ip, id, z)) { bericht = L"No TFU2 character in the scene - import one first."; return false; }
+    if (!HoleSkelett(ip, id, z)) { bericht = L"No TFU character in the scene - import one first."; return false; }
     std::vector<uint8_t> roh;
     std::string fehler;
     tfu::AnimClip c;
@@ -1051,7 +1079,7 @@ bool WendeFolgeAn(const tfu::Pakete& p, const std::vector<std::string>& pfade, i
     LogNeu(("Folge mit " + std::to_string(pfade.size()) + " Clips").c_str());
     plan.clear();
     ZielSkelett z;
-    if (!HoleSkelett(ip, id, z)) { bericht = L"No TFU2 character in the scene - import one first."; return false; }
+    if (!HoleSkelett(ip, id, z)) { bericht = L"No TFU character in the scene - import one first."; return false; }
     abstand = std::max(0, std::min(abstand, 1000));
 
     // Clips lesen, nur passende behalten
@@ -1262,6 +1290,8 @@ int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen) {
         fe.gto = tfu::Utf8(w);
         fe.name = tfu::OhneEndung(tfu::Blatt(fe.gto));
         fe.rig = tfu::RigAus(fe.gto);
+        // Lose Datei: TFU1-Pfade liegen unter Scum\ (TFU2: Game\Disc\)
+        fe.spiel = tfu::Klein(fe.gto).find("\\scum\\") != std::string::npos ? 1 : 2;
         const float mass = Massstab();
         theHold.Suspend();
         const std::string id = NeueId();
@@ -1273,6 +1303,7 @@ int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen) {
             if (node == nullptr) continue;
             node->SetUserPropString(MSTR(_T("tfu2_id")), M(id));
             node->SetUserPropString(MSTR(_T("tfu2_figur")), M(fe.gto));
+            node->SetUserPropInt(MSTR(_T("tfu2_spiel")), fe.spiel);
             size_t gw = 0;
             BaueSkin(ip, node, m.meshes[i], s, gw);
         }
@@ -1280,8 +1311,14 @@ int ImportiereEingang(const MCHAR* pfad, BOOL ohneRueckfragen) {
         ip->RedrawViews(ip->GetTime());
         return 1;
     }
-    // Spiel: das Fenster fuer diesen Ordner oeffnen.
-    SchreibeEinstellung(L"Spielordner", w);
+    // Spiel: das Fenster fuer diesen Ordner oeffnen (TFU1 hat SWTFU.exe bzw. kaPA-Pakete).
+    {
+        tfu::Pakete probe;
+        std::string fehler;
+        const int nr = probe.Oeffne(w, fehler) ? probe.Spiel() : 2;
+        SchreibeEinstellung(SpielordnerSchluessel(nr), probe.Spiel() != 0 ? probe.Ordner() : w);
+        SchreibeEinstellung(L"Spiel", nr == 1 ? L"1" : L"2");
+    }
     return OeffneFenster() > 0 ? 1 : 0;
 }
 

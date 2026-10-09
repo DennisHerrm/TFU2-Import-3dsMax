@@ -41,6 +41,7 @@ struct Fenster {
     int zeilenHoehe = 16;
     const tfu::Pakete* pakete = nullptr;
     const tfu::Katalog* katalog = nullptr;
+    int spiel = 0;                 // Spiel, dessen Katalog geladen ist (das der gewaehlten Figur)
     std::vector<SzenenFigur> figuren;
     int figurWahl = -1;
     int zeige = 0;
@@ -88,6 +89,28 @@ const tfu::FigurEintrag* KatalogFigur(const Fenster& f, const SzenenFigur& s) {
     return nullptr;
 }
 
+// Katalog des Spiels, aus dem die gewaehlte Figur stammt (TFU1 oder TFU2).
+bool LadeSpiel(Fenster& f) {
+    const SzenenFigur* sf = GewaehlteFigur(f);
+    const int nr = sf != nullptr ? sf->spiel : AktivesSpiel();
+    if (nr == f.spiel && f.katalog != nullptr) return true;
+    std::string fehler;
+    HCURSOR alt = SetCursor(LoadCursor(nullptr, IDC_WAIT));
+    const bool ok = SpielNr(nr, f.pakete, f.katalog, fehler);
+    SetCursor(alt);
+    f.eigeneJeFigur.clear();           // Indizes gehoeren zum alten Katalog
+    if (!ok) {
+        f.pakete = nullptr;
+        f.katalog = nullptr;
+        f.spiel = 0;
+        Status(f, std::wstring(L"No game folder for ") + (nr == 1 ? L"TFU 1" : L"TFU 2") +
+                      L" yet - open the character window (TFU2 Import), switch to it and pick the game folder.", true);
+        return false;
+    }
+    f.spiel = nr;
+    return true;
+}
+
 // ------------------------------------------------------------
 //  Liste fuellen
 // ------------------------------------------------------------
@@ -107,7 +130,7 @@ void Fuelle(Fenster& f) {
         }
         if (zeige != 3 && skelett.empty()) {
             zeige = 3;
-            hinweis = L"No TFU2 character in the scene - showing all clips. Import a character first.";
+            hinweis = L"No TFU character in the scene - showing all clips. Import a character first.";
         }
         const std::vector<std::vector<uint32_t>>* crcs = nullptr;
         if (zeige != 3) {
@@ -163,12 +186,13 @@ void FuelleFiguren(Fenster& f) {
     SendMessageW(c, CB_RESETCONTENT, 0, 0);
     f.figurWahl = -1;
     if (f.figuren.empty()) {
-        SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(no TFU2 character in the scene)"));
+        SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(no TFU character in the scene)"));
         SendMessageW(c, CB_SETCURSEL, 0, 0);
         return;
     }
     for (size_t i = 0; i < f.figuren.size(); ++i) {
-        const std::wstring t = tfu::Breit(f.figuren[i].name) + L"  (" + std::to_wstring(f.figuren[i].knochen) + L" bones)";
+        const std::wstring t = tfu::Breit(f.figuren[i].name) + L"  (TFU " + std::to_wstring(f.figuren[i].spiel) + L", " +
+                               std::to_wstring(f.figuren[i].knochen) + L" bones)";
         SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t.c_str()));
         if (!vorher.empty() && f.figuren[i].id == vorher) f.figurWahl = static_cast<int>(i);
     }
@@ -360,14 +384,7 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         LiesSequenzen(f->sequenzen);
         FuelleSequenzen(*f);
         FuelleFiguren(*f);
-        std::string fehler;
-        if (!Spiel(LiesEinstellung(L"Spielordner"), f->pakete, f->katalog, fehler)) {
-            f->pakete = nullptr;
-            f->katalog = nullptr;
-            Status(*f, L"No game folder yet - open the character window (TFU2 Import) once and pick the game folder.", true);
-        } else {
-            Fuelle(*f);
-        }
+        if (LadeSpiel(*f)) Fuelle(*f);
         return TRUE;
     }
     case WM_MEASUREITEM: {
@@ -405,6 +422,7 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (code == CBN_SELCHANGE) {
                 f->figurWahl = static_cast<int>(SendDlgItemMessageW(h, IDC_A_FIGUR, CB_GETCURSEL, 0, 0));
                 if (f->figurWahl >= static_cast<int>(f->figuren.size())) f->figurWahl = -1;
+                LadeSpiel(*f);         // die Figur kann aus dem anderen Spiel stammen
                 Fuelle(*f);
             }
             return TRUE;

@@ -9,7 +9,7 @@ data is included - the plugin reads the files of your own game installation.
 
 Requirements
 - Windows 10/11 64-bit, 3ds Max 2016-2027
-- Star Wars: The Force Unleashed II (PC) installed
+- Star Wars: The Force Unleashed and/or The Force Unleashed II (PC) installed
 - Close 3ds Max before installing
 
 License: GPL-3.0 (see LICENSE on GitHub)

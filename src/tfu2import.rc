@@ -17,8 +17,10 @@ EXSTYLE WS_EX_CONTROLPARENT
 CAPTION "TFU2 Import"
 FONT 9, "Segoe UI", 400, 0, 0x0
 BEGIN
-    LTEXT           "Game folder", IDC_ORDNER_LABEL, 7, 10, 44, 8
-    LTEXT           "", IDC_ORDNER, 54, 10, 316, 8, SS_PATHELLIPSIS | SS_NOPREFIX
+    PUSHBUTTON      "TFU 1", IDC_SPIEL1, 7, 6, 40, 15, BS_OWNERDRAW | WS_TABSTOP | WS_GROUP
+    PUSHBUTTON      "TFU 2", IDC_SPIEL2, 50, 6, 40, 15, BS_OWNERDRAW | WS_TABSTOP
+    LTEXT           "Game folder", IDC_ORDNER_LABEL, 99, 10, 42, 8
+    LTEXT           "", IDC_ORDNER, 143, 10, 227, 8, SS_PATHELLIPSIS | SS_NOPREFIX
     PUSHBUTTON      "Browse...", IDC_DURCHSUCHEN, 376, 6, 57, 15, BS_OWNERDRAW | WS_TABSTOP
     CONTROL         "", IDC_STATUS, "Static", SS_OWNERDRAW, 7, 26, 426, 16
 
@@ -71,8 +73,8 @@ BEGIN
 END
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,2,1,0
- PRODUCTVERSION 0,2,1,0
+ FILEVERSION 0,3,0,0
+ PRODUCTVERSION 0,3,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS VOS_NT_WINDOWS32
@@ -85,11 +87,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "DH"
             VALUE "FileDescription", "TFU2 Import - Star Wars The Force Unleashed II for 3ds Max"
-            VALUE "FileVersion", "0.2.1"
+            VALUE "FileVersion", "0.3.0"
             VALUE "InternalName", "TFU2Import"
             VALUE "OriginalFilename", "TFU2Import.dlu"
             VALUE "ProductName", "TFU2 Import"
-            VALUE "ProductVersion", "0.2.1"
+            VALUE "ProductVersion", "0.3.0"
         END
     END
     BLOCK "VarFileInfo"

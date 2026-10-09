@@ -75,6 +75,7 @@ bool Modell::Lies(const GtoDatei& g, std::string& fehler) {
     knochen.clear();
     meshes.clear();
     materialien.clear();
+    materialDaten.clear();
 
     // Alle PlatformGeometry-Objekte in Dateireihenfolge: "SharedVertexData = k"
     // in einem Strom heisst, die Vertices stehen im k-ten Objekt (gemessen an
@@ -92,7 +93,11 @@ bool Modell::Lies(const GtoDatei& g, std::string& fehler) {
             if (name.empty()) name = o.name;
         } else if (o.protokoll == "Materials") {
             for (const GtoKomponente& k : o.komponenten) {
-                if (const GtoEigenschaft* e = k.Finde("Name")) materialien.push_back(g.String(*e));
+                const GtoEigenschaft* e = k.Finde("Name");
+                if (e == nullptr) continue;
+                materialien.push_back(g.String(*e));
+                const GtoEigenschaft* d = k.Finde("Data");
+                materialDaten.push_back(d != nullptr ? g.String(*d) : std::string());
             }
         } else if (o.protokoll == "Skeleton") {
             const GtoKomponente* k = o.Finde("Skeleton");

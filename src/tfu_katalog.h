@@ -29,6 +29,7 @@ struct FigurEintrag {
     std::string rig;           // z.B. maleAverage
     std::string actor;         // *.actor.xml, die das Modell benutzt (kann leer sein)
     bool skelett = false;      // die GTO hat ein Skeleton-Objekt (sonst ein starres Teil)
+    int spiel = 2;             // 1 = TFU, 2 = TFU II (aus Pakete::Spiel)
     std::vector<std::string> actors;   // alle *.actor.xml, die auf das Modell zeigen
 };
 
@@ -89,10 +90,13 @@ bool PasstZu(const std::vector<uint32_t>& clip, const std::vector<uint32_t>& ske
 std::string RigAus(const std::string& pfad);
 
 // GTO-Materialname -> Texturen, ueber actor.xml (und Rueckfall: gleichnamige
-// .material im Ordner der Figur).
+// .material im Ordner der Figur). TFU1: mDefMaterial ist nur ein Name, die
+// .material wird ueber ihren Dateinamen gesucht; letzter Rueckfall ist das
+// in der GTO eingebettete Material (eingebettet, parallel zu gtoMaterialien).
 std::map<std::string, TexturSatz> LoeseMaterialien(const Pakete& p, const FigurEintrag& f,
                                                    const std::vector<std::string>& gtoMaterialien,
-                                                   std::vector<std::string>* protokoll = nullptr);
+                                                   std::vector<std::string>* protokoll = nullptr,
+                                                   const std::vector<std::string>* eingebettet = nullptr);
 
 // Textur aus dem Archiv in den Zwischenspeicher legen. Normalmaps im
 // DXT5nm-Format (X in Alpha, Y in Gruen) werden in eine gewoehnliche

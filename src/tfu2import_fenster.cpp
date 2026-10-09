@@ -30,9 +30,25 @@ using tfu2ui::Mische;
 constexpr int kKategorien = 5;
 const wchar_t* const kReiter[kKategorien] = { L"Starkiller", L"Characters", L"Creatures + droids", L"Other", L"All" };
 
+bool IstEines(const std::string& s, std::initializer_list<const char*> liste) {
+    for (const char* x : liste) if (s == x) return true;
+    return false;
+}
+
 // Figurenart fuer die Reiter
 int Kategorie(const tfu::FigurEintrag& f) {
     const std::string n = tfu::Klein(tfu::Blatt(f.ordner)), name = tfu::Klein(f.name), rig = tfu::Klein(f.rig);
+    if (f.spiel == 1) {
+        // TFU1: "ma_player", "ma_playerHoth", "cine_playerFeluciaAct2" ... (Ordner rigs/player*)
+        if (n.compare(0, 6, "player") == 0 || name.find("player") != std::string::npos) return 0;
+        if (IstEines(rig, { "maleaverage", "femaleaverage", "malebrute", "maledwarf", "wookiee", "wookieebrute", "kazdan", "jabba",
+                            "cinematicchar" }))
+            return 1;
+        if (IstEines(rig, { "rancor", "femalerancor", "felucianbrute", "feluciancreature", "giantslug", "astromech", "droidhover",
+                            "droidmouse", "gonk", "junktitan", "laserarm", "trix", "tendril", "sarlaccspike" }))
+            return 2;
+        return 3;
+    }
     if (n.compare(0, 6, "player") == 0 || name.compare(0, 6, "player") == 0) return 0;
     if (rig == "maleaverage" || rig == "femaleaverage" || rig == "malebrute" || rig == "maledwarf") return 1;
     if (rig == "giant" || rig == "gorillaboss" || rig == "terrorgiant" || rig == "titandroid" || rig == "titanspawn" ||
@@ -55,7 +71,8 @@ struct Fenster {
     int zeilenHoehe = 16;
     const tfu::Pakete* pakete = nullptr;
     const tfu::Katalog* katalog = nullptr;
-    std::wstring ordner;
+    int spiel = 2;                 // 1 = TFU, 2 = TFU II (Umschalter oben)
+    std::wstring ordner;           // Ordner des gewaehlten Spiels
     std::vector<size_t> sichtbar;
     size_t anzahl[kKategorien] = {};
     int kategorie = 0;
@@ -79,11 +96,18 @@ void Status(Fenster& f, const std::wstring& t, bool fehler = false) {
 // ------------------------------------------------------------
 //  Spielordner
 // ------------------------------------------------------------
-bool IstSpielordner(const std::wstring& o) {
+// TFU2: LevelPacks\pak0.lp (ZIP). TFU1: LevelPacks\player.actor.xml_pc.lp (kaPA, eines von vielen).
+bool IstSpielordner(const std::wstring& o, int spiel) {
     if (o.empty()) return false;
-    const DWORD a = GetFileAttributesW((o + L"\\LevelPacks\\pak0.lp").c_str());
+    const wchar_t* datei = spiel == 1 ? L"\\LevelPacks\\player.actor.xml_pc.lp" : L"\\LevelPacks\\pak0.lp";
+    const DWORD a = GetFileAttributesW((o + datei).c_str());
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
+
+const wchar_t* SpielName(int spiel) {
+    return spiel == 1 ? L"Star Wars The Force Unleashed" : L"Star Wars The Force Unleashed 2";
+}
+const wchar_t* SpielExe(int spiel) { return spiel == 1 ? L"SWTFU.exe" : L"SWTFU2.exe"; }
 
 std::wstring Registrywert(HKEY wurzel, const wchar_t* schluessel, const wchar_t* name) {
     wchar_t puffer[MAX_PATH] = {};
@@ -93,17 +117,17 @@ std::wstring Registrywert(HKEY wurzel, const wchar_t* schluessel, const wchar_t*
 }
 
 // Steam-Bibliotheken nach dem Spiel absuchen (Standardordner, libraryfolders.vdf).
-std::wstring SucheSpiel() {
+std::wstring SucheSpiel(int nr) {
     std::vector<std::wstring> steam;
     for (const std::wstring& s : { Registrywert(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", L"SteamPath"),
                                    Registrywert(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WOW6432Node\\Valve\\Steam", L"InstallPath") })
         if (!s.empty()) steam.push_back(s);
     steam.push_back(L"C:\\Program Files (x86)\\Steam");
-    const std::wstring spiel = L"\\steamapps\\common\\Star Wars The Force Unleashed 2";
+    const std::wstring spiel = std::wstring(L"\\steamapps\\common\\") + SpielName(nr);
     for (const std::wstring& s : steam) {
         std::wstring o = s;
         std::replace(o.begin(), o.end(), L'/', L'\\');
-        if (IstSpielordner(o + spiel)) return o + spiel;
+        if (IstSpielordner(o + spiel, nr)) return o + spiel;
         // weitere Bibliotheken: "path"  "D:\\SteamLibrary"
         FILE* vdf = _wfopen((o + L"\\steamapps\\libraryfolders.vdf").c_str(), L"rb");
         if (vdf == nullptr) continue;
@@ -123,20 +147,21 @@ std::wstring SucheSpiel() {
                 sauber += pfad[i];
             }
             const std::wstring kand = tfu::Breit(sauber) + spiel;
-            if (IstSpielordner(kand)) return kand;
+            if (IstSpielordner(kand, nr)) return kand;
             p = e + 1;
         }
     }
     return std::wstring();
 }
 
-bool WaehleOrdner(HWND besitzer, std::wstring& ordner) {
+bool WaehleOrdner(HWND besitzer, int spiel, std::wstring& ordner) {
+    const std::wstring titel = std::wstring(SpielName(spiel)) + L" - the folder with " + SpielExe(spiel) + L" and LevelPacks";
 #ifndef __IFileOpenDialog_INTERFACE_DEFINED__
     // Das SDK von Max 2016 stellt eine Windows-Version vor Vista ein - dann gibt
     // es IFileOpenDialog nicht, und der klassische Ordnerdialog tut es.
     BROWSEINFOW bi = {};
     bi.hwndOwner = besitzer;
-    bi.lpszTitle = L"Star Wars The Force Unleashed 2 - the folder with SWTFU2.exe and LevelPacks";
+    bi.lpszTitle = titel.c_str();
     bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
     LPITEMIDLIST id = SHBrowseForFolderW(&bi);
     if (id == nullptr) return false;
@@ -151,7 +176,7 @@ bool WaehleOrdner(HWND besitzer, std::wstring& ordner) {
     DWORD opt = 0;
     dlg->GetOptions(&opt);
     dlg->SetOptions(opt | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
-    dlg->SetTitle(L"Star Wars The Force Unleashed 2 - the folder with SWTFU2.exe and LevelPacks");
+    dlg->SetTitle(titel.c_str());
     bool ok = false;
     if (SUCCEEDED(dlg->Show(besitzer))) {
         IShellItem* item = nullptr;
@@ -180,7 +205,7 @@ int EintragsHoehe(HWND h) {
 
 void MerkeAnker(Fenster& f) {
     struct { int id; unsigned fl; } const liste[] = {
-        { IDC_ORDNER_LABEL, kL | kO }, { IDC_ORDNER, kL | kO | kR }, { IDC_DURCHSUCHEN, kO | kR }, { IDC_STATUS, kL | kO | kR },
+        { IDC_SPIEL1, kL | kO }, { IDC_SPIEL2, kL | kO }, { IDC_ORDNER_LABEL, kL | kO }, { IDC_ORDNER, kL | kO | kR }, { IDC_DURCHSUCHEN, kO | kR }, { IDC_STATUS, kL | kO | kR },
         { IDC_TAB0, kL | kO }, { IDC_TAB0 + 1, kL | kO }, { IDC_TAB0 + 2, kL | kO }, { IDC_TAB0 + 3, kL | kO }, { IDC_TAB0 + 4, kL | kO },
         { IDC_STATISCH, kO | kR }, { IDC_SUCHE_LABEL, kL | kO }, { IDC_SUCHE, kL | kO | kR }, { IDC_ANZAHL, kO | kR },
         { IDC_LISTE, kL | kO | kR | kU }, { IDC_DETAIL, kL | kR | kU }, { IDC_FUSS, kL | kR | kU },
@@ -237,7 +262,8 @@ void ZeichneEintrag(const Fenster& f, const DRAWITEMSTRUCT& d) {
     HGDIOBJ altF = SelectObject(dc, f.fontNormal);
 
     // Rechts in Zeile 1: Rig und Herkunft, gedaempft.
-    const bool dlc = tfu::Klein(fi.gto).find("game/dlc/") == 0;
+    const std::string gk = tfu::Klein(fi.gto);
+    const bool dlc = gk.find("game/dlc/") == 0 || gk.find("scum/dlc") == 0;   // TFU1: Scum/DLCcontent, DLC2Content, DLC3Content
     std::wstring meta = tfu::Breit(fi.rig);
     if (!fi.skelett) meta += L"  \u00B7  static";
     if (dlc) meta += L"  \u00B7  DLC";
@@ -261,6 +287,7 @@ void ZeichneEintrag(const Fenster& f, const DRAWITEMSTRUCT& d) {
     std::string ort = fi.ordner;
     const size_t c = tfu::Klein(ort).find("characters/");
     if (c != std::string::npos) ort = ort.substr(c + 11);
+    if (tfu::Klein(ort).compare(0, 5, "pcdx/") == 0) ort = ort.substr(5);
     std::wstring unter = tfu::Breit(ort);
     if (!fi.actor.empty()) unter += L"  \u00B7  " + tfu::Breit(tfu::Blatt(fi.actor));
     RECT uz = z2;
@@ -363,11 +390,13 @@ void FuelleListe(Fenster& f) {
 }
 
 void Lade(Fenster& f) {
+    for (int id : { IDC_SPIEL1, IDC_SPIEL2 }) InvalidateRect(GetDlgItem(f.h, id), nullptr, FALSE);
     SetDlgItemTextW(f.h, IDC_ORDNER, f.ordner.empty() ? L"(not found - choose it with Browse)" : f.ordner.c_str());
-    if (!IstSpielordner(f.ordner)) {
+    if (!IstSpielordner(f.ordner, f.spiel)) {
         f.pakete = nullptr;
         f.katalog = nullptr;
-        Status(f, L"Choose the game folder (the one with SWTFU2.exe and LevelPacks).", !f.ordner.empty());
+        Status(f, std::wstring(L"Choose the folder of ") + SpielName(f.spiel) + L" (the one with " + SpielExe(f.spiel) + L" and LevelPacks).",
+               !f.ordner.empty());
         FuelleListe(f);
         return;
     }
@@ -383,7 +412,8 @@ void Lade(Fenster& f) {
     } else {
         size_t mitSkelett = 0;
         for (const tfu::FigurEintrag& fi : f.katalog->figuren) if (fi.skelett) ++mitSkelett;
-        Status(f, std::to_wstring(mitSkelett) + L" characters with a skeleton, " + std::to_wstring(f.katalog->figuren.size()) +
+        Status(f, std::wstring(f.spiel == 1 ? L"TFU 1: " : L"TFU 2: ") + std::to_wstring(mitSkelett) + L" characters with a skeleton, " +
+                      std::to_wstring(f.katalog->figuren.size()) +
                       L" models, " + std::to_wstring(f.katalog->animationen.size()) + L" animations in " +
                       std::to_wstring(f.pakete->PaketZahl()) + L" packs.");
         SetDlgItemTextW(f.h, IDC_FUSS, (std::wstring(L"TFU2 Import ") + TFU2IMPORT_VERSION_STR + L"  \u00B7  " +
@@ -404,6 +434,18 @@ void Importiere(Fenster& f) {
     SetCursor(alt);
     if (ok) f.importiert = true;
     Status(f, (ok ? L"Imported " : L"Import failed: ") + bericht, !ok);
+}
+
+// Umschalter TFU 1 / TFU 2: gemerkter Ordner des Spiels, sonst in Steam suchen.
+void WaehleSpiel(Fenster& f, int spiel) {
+    f.spiel = spiel == 1 ? 1 : 2;
+    SchreibeEinstellung(L"Spiel", f.spiel == 1 ? L"1" : L"2");
+    f.ordner = LiesEinstellung(SpielordnerSchluessel(f.spiel));
+    if (!IstSpielordner(f.ordner, f.spiel)) {
+        const std::wstring gefunden = SucheSpiel(f.spiel);
+        if (!gefunden.empty()) f.ordner = gefunden;
+    }
+    Lade(f);
 }
 
 void Einrichten(Fenster& f) {
@@ -428,12 +470,8 @@ void Einrichten(Fenster& f) {
     MerkeAnker(f);
     f.kategorie = std::clamp(_wtoi(LiesEinstellung(L"Kategorie").c_str()), 0, kKategorien - 1);
     f.statisch = LiesEinstellung(L"StatischeTeile") == L"1";
-    f.ordner = LiesEinstellung(L"Spielordner");
-    if (!IstSpielordner(f.ordner)) {
-        const std::wstring gefunden = SucheSpiel();
-        if (!gefunden.empty()) f.ordner = gefunden;
-    }
-    Lade(f);
+    f.spiel = AktivesSpiel();
+    WaehleSpiel(f, f.spiel);
     SetFocus(GetDlgItem(f.h, f.katalog != nullptr ? IDC_SUCHE : IDC_DURCHSUCHEN));
 }
 
@@ -478,7 +516,8 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         else if (d->CtlType == ODT_BUTTON) {
             const int id = static_cast<int>(d->CtlID);
             const bool betont = (id >= IDC_TAB0 && id < IDC_TAB0 + kKategorien && id - IDC_TAB0 == f->kategorie) ||
-                                (id == IDC_STATISCH && f->statisch) || id == IDOK;
+                                (id == IDC_STATISCH && f->statisch) || id == IDOK ||
+                                (id == IDC_SPIEL1 && f->spiel == 1) || (id == IDC_SPIEL2 && f->spiel == 2);
             tfu2ui::ZeichneKnopf(f->pal, f->fontNormal, *d, betont);
         }
         return TRUE;
@@ -509,12 +548,30 @@ INT_PTR Verarbeite(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return TRUE;
         }
         switch (id) {
+        case IDC_SPIEL1:
+        case IDC_SPIEL2:
+            if (code == BN_CLICKED) {
+                const int nr = id == IDC_SPIEL1 ? 1 : 2;
+                if (nr != f->spiel) {
+                    SetDlgItemTextW(h, IDC_SUCHE, L"");
+                    WaehleSpiel(*f, nr);
+                }
+            }
+            return TRUE;
         case IDC_DURCHSUCHEN:
             if (code == BN_CLICKED) {
                 std::wstring o;
-                if (WaehleOrdner(h, o)) {
-                    // Auch LevelPacks oder ein Unterordner des Spiels ist recht.
-                    if (!IstSpielordner(o) && IstSpielordner(o + L"\\..")) o += L"\\..";
+                if (WaehleOrdner(h, f->spiel, o)) {
+                    // Auch LevelPacks oder ein Unterordner des Spiels ist recht. Ist es
+                    // der Ordner des anderen Teils, wird umgeschaltet.
+                    for (int nr : { f->spiel, 3 - f->spiel }) {
+                        if (!IstSpielordner(o, nr) && IstSpielordner(o + L"\\..", nr)) o += L"\\..";
+                        if (IstSpielordner(o, nr)) {
+                            f->spiel = nr;
+                            SchreibeEinstellung(L"Spiel", nr == 1 ? L"1" : L"2");
+                            break;
+                        }
+                    }
                     wchar_t voll[MAX_PATH];
                     if (GetFullPathNameW(o.c_str(), MAX_PATH, voll, nullptr) > 0) o = voll;
                     f->ordner = o;

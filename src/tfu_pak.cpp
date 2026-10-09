@@ -105,32 +105,114 @@ std::string Pakete::Schluessel(const std::string& pfad) {
     return s;
 }
 
+void Pakete::Merke(const PakEintrag& e, bool spaeterGewinnt) {
+    const std::string s = Schluessel(e.name);
+    const auto it = nachPfad_.find(s);
+    if (it != nachPfad_.end()) {
+        if (spaeterGewinnt) eintraege_[it->second] = e;
+    } else {
+        nachPfad_.emplace(s, eintraege_.size());
+        eintraege_.push_back(e);
+    }
+}
+
 bool Pakete::Oeffne(const std::wstring& ordnerIn, std::string& fehler) {
+    spiel_ = 0;
     ordner_.clear();
     dateien_.clear();
     eintraege_.clear();
     nachPfad_.clear();
 
-    // Ordner mit SWTFU2.exe, LevelPacks selbst oder eine der .lp-Dateien.
+    // Ordner mit SWTFU2.exe/SWTFU.exe, LevelPacks selbst oder eine der .lp-Dateien.
     std::wstring o = ordnerIn;
     while (!o.empty() && (o.back() == L'\\' || o.back() == L'/')) o.pop_back();
     if (o.size() > 3 && (_wcsicmp(o.c_str() + o.size() - 3, L".lp") == 0 || _wcsicmp(o.c_str() + o.size() - 4, L".exe") == 0)) {
         const size_t p = o.find_last_of(L"\\/");
         if (p != std::wstring::npos) o = o.substr(0, p);
     }
+    auto ohneLetztes = [](const std::wstring& s) {
+        const size_t p = s.find_last_of(L"\\/");
+        return p == std::wstring::npos ? s : s.substr(0, p);
+    };
+    // TFU2: pak0.lp (ZIP)
     std::wstring lp = o + L"\\LevelPacks";
-    if (!DateiDa(lp + L"\\pak0.lp")) {
-        if (DateiDa(o + L"\\pak0.lp")) {
-            lp = o;
-            const size_t p = o.find_last_of(L"\\/");
-            if (p != std::wstring::npos) o = o.substr(0, p);
-        } else {
-            fehler = "LevelPacks\\pak0.lp not found in " + Utf8(o);
+    if (!DateiDa(lp + L"\\pak0.lp") && DateiDa(o + L"\\pak0.lp")) { lp = o; o = ohneLetztes(o); }
+    if (DateiDa(lp + L"\\pak0.lp")) {
+        ordner_ = o;
+        spiel_ = 2;
+        return OeffneZip(lp, fehler);
+    }
+    // TFU1: player.actor.xml_pc.lp und viele weitere kaPA-Pakete
+    if (!DateiDa(lp + L"\\player.actor.xml_pc.lp") && DateiDa(o + L"\\player.actor.xml_pc.lp")) { lp = o; o = ohneLetztes(o); }
+    if (DateiDa(lp + L"\\player.actor.xml_pc.lp")) {
+        ordner_ = o;
+        spiel_ = 1;
+        return OeffneKapa(lp, fehler);
+    }
+    fehler = "no game data (LevelPacks\\pak0.lp or LevelPacks\\player.actor.xml_pc.lp) in " + Utf8(o);
+    return false;
+}
+
+bool Pakete::OeffneKapa(const std::wstring& lp, std::string& fehler) {
+    // Erst die Kostuem-/Actor-Pakete (klein), dann die Level - Reihenfolge egal,
+    // die Inhalte gleichen Namens sind gleich. Sortiert fuer gleiche Ergebnisse.
+    std::vector<std::wstring> namen;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((lp + L"\\*.lp").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) namen.push_back(fd.cFileName);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    std::sort(namen.begin(), namen.end(), [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+    for (const std::wstring& n : namen) {
+        const std::wstring pfad = lp + L"\\" + n;
+        Datei f(pfad);
+        if (!f.ok()) continue;
+        const uint64_t groesse = f.Groesse();
+        uint8_t kopf[0x50];
+        if (groesse < sizeof kopf || !f.Lies(0, kopf, sizeof kopf) || std::memcmp(kopf, "kaPA", 4) != 0) continue;
+        uint32_t w[20];
+        std::memcpy(w, kopf, sizeof w);
+        const uint32_t zahl = w[2], zusatz = w[6], namGroesse = w[7], versatzTab = w[8], daten = w[12];
+        const uint64_t namAnfang = 0x50ull + zusatz;
+        const uint64_t tab = (namAnfang + namGroesse + 15) & ~15ull;
+        if (zahl == 0 || zahl > 1000000 || tab + 64ull * zahl > groesse || versatzTab + 16ull * zahl > groesse || daten > groesse) {
+            fehler = "broken kaPA header in " + Utf8(pfad);
             return false;
         }
+        std::vector<uint8_t> nam(namGroesse), ein(64ull * zahl), vers(16ull * zahl);
+        if (!f.Lies(namAnfang, nam.data(), nam.size()) || !f.Lies(tab, ein.data(), ein.size()) ||
+            !f.Lies(versatzTab, vers.data(), vers.size())) {
+            fehler = "read error " + Utf8(pfad);
+            return false;
+        }
+        const uint32_t pak = static_cast<uint32_t>(dateien_.size());
+        for (uint32_t i = 0; i < zahl; ++i) {
+            const uint8_t* r = &ein[64ull * i];
+            const uint32_t no = U32(r + 0x14), gr = U32(r + 0x28);
+            const uint32_t idx = U32(&vers[16ull * i]), off = U32(&vers[16ull * i + 4]);
+            if (no >= nam.size() || idx != i) continue;
+            const uint8_t* s = &nam[no];
+            const uint8_t* e = static_cast<const uint8_t*>(std::memchr(s, 0, nam.size() - no));
+            if (e == nullptr || e == s) continue;
+            PakEintrag pe;
+            pe.name.assign(reinterpret_cast<const char*>(s), static_cast<size_t>(e - s));
+            pe.pak = pak;
+            pe.kopf = static_cast<uint64_t>(daten) + off;
+            pe.gepackt = pe.groesse = gr;
+            pe.kapa = true;
+            if (pe.kopf + gr > groesse) continue;
+            Merke(pe, false);
+        }
+        dateien_.push_back(pfad);
     }
-    ordner_ = o;
+    if (dateien_.empty()) { fehler = "no kaPA level packs found in " + Utf8(lp); return false; }
+    return true;
+}
 
+bool Pakete::OeffneZip(const std::wstring& lp, std::string& fehler) {
     for (int i = 0; i < 64; ++i) {
         const std::wstring pfad = lp + L"\\pak" + std::to_wstring(i) + L".lp";
         if (!DateiDa(pfad)) break;
@@ -190,14 +272,7 @@ bool Pakete::Oeffne(const std::wstring& ordnerIn, std::string& fehler) {
             }
             p += 46u + nl + xl + kl;
             if (!e.name.empty() && e.name.back() == '/') continue;   // Ordner
-            const std::string s = Schluessel(e.name);
-            const auto it = nachPfad_.find(s);
-            if (it != nachPfad_.end()) {
-                eintraege_[it->second] = e;          // spaeteres Paket gewinnt
-            } else {
-                nachPfad_.emplace(s, eintraege_.size());
-                eintraege_.push_back(e);
-            }
+            Merke(e, true);                          // spaeteres Paket gewinnt
         }
         dateien_.push_back(pfad);
     }
@@ -222,6 +297,11 @@ bool Pakete::Lies(const PakEintrag& e, std::vector<uint8_t>& aus, std::string& f
     if (e.pak >= dateien_.size()) { fehler = "bad pak index"; return false; }
     Datei f(dateien_[e.pak]);
     if (!f.ok()) { fehler = "cannot open " + Utf8(dateien_[e.pak]); return false; }
+    if (e.kapa) {
+        aus.resize(static_cast<size_t>(e.groesse));
+        if (!aus.empty() && !f.Lies(e.kopf, aus.data(), aus.size())) { fehler = "read error: " + e.name; return false; }
+        return true;
+    }
     uint8_t lk[30];
     if (!f.Lies(e.kopf, lk, sizeof lk) || U32(lk) != 0x04034b50) { fehler = "bad local header: " + e.name; return false; }
     const uint64_t daten = e.kopf + 30 + U16(lk + 26) + U16(lk + 28);
@@ -243,6 +323,10 @@ bool Pakete::Lies(const PakEintrag& e, std::vector<uint8_t>& aus, std::string& f
 bool Pakete::LiesAnfang(const PakEintrag& e, size_t n, std::vector<uint8_t>& aus) const {
     if (e.pak >= dateien_.size() || e.methode != 0) return false;
     Datei f(dateien_[e.pak]);
+    if (e.kapa) {
+        aus.resize(static_cast<size_t>(std::min<uint64_t>(n, e.groesse)));
+        return f.ok() && (aus.empty() || f.Lies(e.kopf, aus.data(), aus.size()));
+    }
     uint8_t lk[30];
     if (!f.ok() || !f.Lies(e.kopf, lk, sizeof lk) || U32(lk) != 0x04034b50) return false;
     const uint64_t daten = e.kopf + 30 + U16(lk + 26) + U16(lk + 28);

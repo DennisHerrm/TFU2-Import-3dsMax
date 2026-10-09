@@ -1,7 +1,7 @@
 # TFU2 Import – development notes
 
-How the plugin reads *Star Wars: The Force Unleashed II* (PC) and how the 3ds Max
-side is built. Everything here was worked out from the game data itself.
+How the plugin reads *Star Wars: The Force Unleashed II* and *The Force Unleashed*
+(PC) and how the 3ds Max side is built. Everything here was worked out from the game data itself.
 
 ## Building
 
@@ -16,9 +16,14 @@ Needs Visual Studio with C++ and CMake. The reader also builds without the Max S
 as `tfudump.exe` (`cmake -S . -B build_tool -A x64 -DTFU2_BUILD_TOOL=ON`):
 
     tfudump <game folder> list | model <name> | anim <path> [n] | materials <name>
-                          checkanims | checkmodels | fit <name> | texture <path> <dir> [normal]
+                          checkanims | checkmodels | fit <name> | stretch <name>
+                          animhash | texture <path> <dir> [normal]
 
-`checkanims` decodes all 6 516 animation files, `checkmodels` all 8 131 models.
+The game folder can be either game. `checkanims` decodes all animation files
+(TFU2 6 516, TFU1 5 007), `checkmodels` all models. `animhash` prints a checksum over
+every decoded value (compare before/after decoder changes), `stretch` lists a
+character's own clips that change bone lengths by more than 15 % (clips of another
+rig).
 
 Source layout: `src/tfu_*` is the reader (no Max SDK), `src/tfu2import_*` the plugin,
 `src/tfu2_ui.h` the window styling, `vendor/` miniz (gzip/PNG) and bcdec (DXT).
@@ -37,6 +42,35 @@ material files – look them up case-insensitively.
 | `.material` | XML; textures as `<property name="colorMap" type="texture" default="….dds">` |
 | `.choreset.xml`, `.choresetgroup.xml` | which animations a character uses (`AnimID` = clip file name) |
 | `.dds` | DXT1/DXT5; normal maps are **DXT5nm** (X in alpha, Y in green, R=255, B=0) |
+
+## The Force Unleashed (TFU1)
+
+Same engine family, same file formats inside, different packs. `LevelPacks\` holds
+159 `*.lp` files – one per level, costume (`player*.actor.xml_pc.lp`) and menu – in
+the **kaPA** format. The same file is stored in many packs (identical copies);
+57 900 distinct files in total, nothing compressed, GTOs without gzip.
+
+    header 0x50 bytes, u32[20]:  [0] "kaPA"  [1] 5  [2] entry count
+        [6] size of an extra header (level name) after 0x50
+        [7] size of the name table   [8] offset table   [12] start of data
+    name table at 0x50 + [6]: zero-terminated paths ("Scum/characters/PCDX/...")
+    entry table right after it (16-aligned), 64 bytes per entry:
+        +0x04 type hash   +0x14 offset into the name table   +0x28 size
+    offset table, 16 bytes per entry: u32 index, u32 offset from [12]
+
+Differences that matter:
+
+* Paths: `Scum/characters/PCDX/<rig>/rigs/<name>/<name>.gto`, clips in
+  `Scum/animation/characters/PCDX/<rig>/...` and `Scum/vignettes/...` (cut-scenes).
+* `mDefMaterial` in the actor is only a name; the `.material` of that name is looked
+  up (preferably below the character folder). Texture properties are `Diffuse`,
+  `DiffuseAndAlpha`, `Normal`, `SpecularandAO`. Every GTO material also embeds a
+  `<materialDefinition>` (`Data`), used as a fallback.
+* Animations: additionally fixed encoding `0x08` with rotation type 8–15 – floats
+  only for the channels in the `1xyz` mask (vehicles, cut-scene props).
+* Rig tokens in clip names: `ma mb fa md frs/frc` (female rancor) `brs` (bull rancor)
+  `kz` (Kazdan) `fb gsl gnk jkt dh am wk wb trix tdl tu tum dm spk`.
+* Imported nodes carry `tfu2_spiel` = 1 or 2; the animation window loads that game.
 
 ## GTO models
 

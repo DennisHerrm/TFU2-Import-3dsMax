@@ -19,6 +19,8 @@
 #define IDC_DETAIL          1021
 #define IDC_FUSS            1022
 #define IDC_ANIMFENSTER     1023
+#define IDC_SPIEL1          1024   // Umschalter TFU 1
+#define IDC_SPIEL2          1025   // Umschalter TFU 2
 
 // Animationsfenster
 #define IDD_ANIMATIONEN     102

@@ -1,8 +1,8 @@
 TFU2 Import for 3ds Max 2016-2027
 =================================
 
-Characters and animations from Star Wars: The Force Unleashed II (PC) in
-3ds Max: skeleton, skinned meshes, materials with textures, animations.
+Characters and animations from Star Wars: The Force Unleashed and
+The Force Unleashed II (PC) in 3ds Max: skeleton, skinned meshes, materials with textures, animations.
 
 Install
   1. Extract the whole ZIP.
@@ -15,8 +15,10 @@ Install
 
 Requirements
   - Windows 10/11, 64-bit, 3ds Max 2016 to 2027
-  - Star Wars: The Force Unleashed II (PC) installed (the plugin reads the
-    game data from your own installation; it contains none)
+  - Star Wars: The Force Unleashed and/or The Force Unleashed II (PC)
+    installed (the plugin reads the game data from your own installation;
+    it contains none). Switch between them with "TFU 1" / "TFU 2" at the
+    top of the character window.
   - Microsoft Visual C++ runtime, version 14.50 or newer:
     https://aka.ms/vc14/vc_redist.x64.exe
     (Install.bat tells you if it is missing; the Setup.exe installs it)

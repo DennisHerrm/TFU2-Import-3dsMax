@@ -46,14 +46,10 @@ bool IstLod(const std::string& kleinName) {
     return p != std::string::npos && p + 4 < kleinName.size() && kleinName[p + 4] >= '0' && kleinName[p + 4] <= '9';
 }
 
-// Texturen aus einer .material
-TexturSatz LiesMaterial(const Pakete& p, const std::string& pfad) {
+// Texturen aus einem <materialDefinition>-Text (.material oder in der GTO eingebettet).
+// TFU1 nennt sie "Diffuse"/"BaseTexture", "Normal"/"NormalMap", "SpecularandAO".
+TexturSatz LiesMaterialText(const Pakete& p, const std::string& text) {
     TexturSatz t;
-    t.materialDatei = pfad;
-    std::vector<uint8_t> roh;
-    std::string f;
-    if (!p.Lies(pfad, roh, f)) return t;
-    const std::string text(roh.begin(), roh.end());
     size_t pos = 0;
     while ((pos = text.find("<property", pos)) != std::string::npos) {
         const size_t e = text.find('>', pos);
@@ -64,13 +60,23 @@ TexturSatz LiesMaterial(const Pakete& p, const std::string& pfad) {
         const std::string typ = Attribut(tag, "type");
         const std::string wert = Attribut(tag, "default");
         if (typ == "texture" && !wert.empty() && p.Hat(wert)) {
-            if (t.farbe.empty() && (Enthaelt(name, "color") || Enthaelt(name, "diffuse"))) t.farbe = wert;
+            if (t.farbe.empty() && (Enthaelt(name, "color") || Enthaelt(name, "diffuse") || (p.Spiel() == 1 && name == "basetexture"))) t.farbe = wert;
             else if (t.normal.empty() && Enthaelt(name, "normal")) t.normal = wert;
             else if (t.glanz.empty() && Enthaelt(name, "spec")) t.glanz = wert;
-        } else if ((name == "alpha" || name == "alphatest") && typ == "bool" && Klein(wert) == "true") {
+        } else if ((name == "alpha" || name == "alphatest") && typ == "bool" &&
+                   (Klein(wert) == "true" || (p.Spiel() == 1 && wert == "1"))) {
             t.alpha = true;
         }
     }
+    return t;
+}
+
+TexturSatz LiesMaterial(const Pakete& p, const std::string& pfad) {
+    std::vector<uint8_t> roh;
+    std::string f;
+    if (!p.Lies(pfad, roh, f)) { TexturSatz t; t.materialDatei = pfad; return t; }
+    TexturSatz t = LiesMaterialText(p, std::string(roh.begin(), roh.end()));
+    t.materialDatei = pfad;
     return t;
 }
 
@@ -94,7 +100,9 @@ std::string RigAus(const std::string& pfad) {
     const std::string k = Klein(pfad);
     const size_t p = k.find("characters/");
     if (p == std::string::npos) return std::string();
-    const size_t a = p + 11;
+    size_t a = p + 11;
+    // TFU1: Scum/characters/PCDX/maleAverage/rigs/player/... - Plattformordner ueberspringen
+    if (k.compare(a, 5, "pcdx/") == 0) a += 5;
     const size_t e = pfad.find('/', a);
     return e == std::string::npos ? std::string() : pfad.substr(a, e - a);
 }
@@ -113,6 +121,7 @@ bool Katalog::Baue(const Pakete& p, std::string& fehler) {
             f.name = OhneEndung(Blatt(e.name));
             f.ordner = Ordner(e.name);
             f.rig = RigAus(e.name);
+            f.spiel = p.Spiel();
             nachGto.emplace(Pakete::Schluessel(e.name), figuren.size());
             figuren.push_back(f);
         } else if (EndetMit(k, ".animations")) {
@@ -332,6 +341,34 @@ std::vector<size_t> Katalog::EigeneAnimationen(const Pakete& p, const FigurEintr
 }
 
 bool KuerzelPasst(const FigurEintrag& f, const AnimEintrag& a) {
+    if (f.spiel == 1) {
+        // TFU1, gemessen wie unten (Glied 2/3 der Clipnamen je Ordner Animation/characters/PCDX/<rig>):
+        // "player_ma_com_...", "femaleRancor_frs_com_roar", "kazdan_kz_com_saber" ...
+        static const char* const kRig1[][3] = {
+            { "maleaverage", "ma", nullptr }, { "malebrute", "mb", nullptr }, { "femaleaverage", "fa", nullptr },
+            { "maledwarf", "md", nullptr }, { "femalerancor", "frs", "frc" }, { "rancor", "brs", nullptr },
+            { "kazdan", "kz", nullptr }, { "felucianbrute", "fb", nullptr }, { "giantslug", "gsl", nullptr },
+            { "gonk", "gnk", nullptr }, { "junktitan", "jkt", nullptr }, { "droidhover", "dh", nullptr },
+            { "astromech", "am", nullptr }, { "wookiee", "wk", nullptr }, { "wookieebrute", "wb", nullptr },
+            { "trix", "trix", nullptr }, { "tendril", "tdl", nullptr }, { "turret", "tu", nullptr },
+            { "turretunmanned", "tum", nullptr }, { "droidmouse", "dm", nullptr }, { "sarlaccspike", "spk", nullptr },
+        };
+        const std::string rig = Klein(f.rig);
+        const char* const* eigen = nullptr;
+        for (const auto& r : kRig1) if (rig == r[0]) eigen = &r[1];
+        if (eigen == nullptr) return true;
+        const std::string n = "_" + Klein(a.name) + "_";
+        bool fremd = false;
+        for (const auto& r : kRig1) {
+            for (int j = 1; j < 3 && r[j] != nullptr; ++j) {
+                if (n.find(std::string("_") + r[j] + "_") == std::string::npos) continue;
+                if ((eigen[0] != nullptr && std::strcmp(eigen[0], r[j]) == 0) || (eigen[1] != nullptr && std::strcmp(eigen[1], r[j]) == 0))
+                    return true;
+                fremd = true;
+            }
+        }
+        return !fremd;
+    }
     // Gemessen: haeufigstes Zweibuchstaben-Glied der Clips je Rig-Ordner.
     static const char* const kRig[][2] = {
         { "maleaverage", "ma" }, { "malebrute", "mb" }, { "femaleaverage", "fa" }, { "maledwarf", "md" },
@@ -382,7 +419,8 @@ bool PasstZu(const std::vector<uint32_t>& clip, const std::vector<uint32_t>& ske
 
 std::map<std::string, TexturSatz> LoeseMaterialien(const Pakete& p, const FigurEintrag& f,
                                                    const std::vector<std::string>& gtoMaterialien,
-                                                   std::vector<std::string>* protokoll) {
+                                                   std::vector<std::string>* protokoll,
+                                                   const std::vector<std::string>* eingebettet) {
     std::map<std::string, TexturSatz> aus;
     // 1. actor.xml (und ihre Basis-Actors) - Zuordnung mGtoMaterial -> mDefMaterial
     std::map<std::string, std::string> zuordnung;    // klein(gtoMat) -> .material
@@ -415,10 +453,30 @@ std::map<std::string, TexturSatz> LoeseMaterialien(const Pakete& p, const FigurE
         const std::string k = Klein(e.name);
         if (EndetMit(k, ".material") && k.compare(0, ordnerK.size(), ordnerK) == 0) materialDateien.push_back(e.name);
     }
-    for (const std::string& gm : gtoMaterialien) {
+    // TFU1: mDefMaterial ist nur ein Name ("Apprentice_Tiefactory_ACT1_bodyflesh") -
+    // die gleichnamige .material, bevorzugt unter dem Ordner der Figur.
+    std::map<std::string, std::string> nachStamm;     // klein(stamm) -> .material
+    if (p.Spiel() == 1) {
+        const std::string figurOrdner = Klein(f.ordner) + "/";
+        for (const PakEintrag& e : p.Eintraege()) {
+            const std::string k = Klein(e.name);
+            if (!EndetMit(k, ".material")) continue;
+            const std::string stamm = Klein(OhneEndung(Blatt(e.name)));
+            const bool nah = k.compare(0, figurOrdner.size(), figurOrdner) == 0;
+            auto it = nachStamm.find(stamm);
+            if (it == nachStamm.end()) nachStamm.emplace(stamm, e.name);
+            else if (nah && Klein(it->second).compare(0, figurOrdner.size(), figurOrdner) != 0) it->second = e.name;
+        }
+    }
+    for (size_t mi = 0; mi < gtoMaterialien.size(); ++mi) {
+        const std::string& gm = gtoMaterialien[mi];
         std::string mat;
         const auto it = zuordnung.find(Klein(gm));
         if (it != zuordnung.end() && p.Hat(it->second)) mat = it->second;
+        if (mat.empty() && it != zuordnung.end() && !nachStamm.empty()) {
+            const auto s = nachStamm.find(Klein(it->second));
+            if (s != nachStamm.end()) mat = s->second;
+        }
         if (mat.empty()) {
             // "figur-upperBody" -> eine .material, deren Name auf "upperbody" endet
             const size_t s = gm.rfind('-');
@@ -434,8 +492,17 @@ std::map<std::string, TexturSatz> LoeseMaterialien(const Pakete& p, const FigurE
         }
         TexturSatz t;
         if (!mat.empty()) t = LiesMaterial(p, mat);
+        // Rueckfall TFU1: das in der GTO eingebettete Material
+        std::string quelle = mat;
+        if (t.farbe.empty() && eingebettet != nullptr && mi < eingebettet->size() && !(*eingebettet)[mi].empty()) {
+            const TexturSatz e = LiesMaterialText(p, (*eingebettet)[mi]);
+            if (!e.farbe.empty()) {
+                t = e;
+                quelle = "(embedded in GTO)";
+            }
+        }
         if (protokoll != nullptr)
-            protokoll->push_back(gm + " -> " + (mat.empty() ? std::string("(no material file)") : mat) +
+            protokoll->push_back(gm + " -> " + (quelle.empty() ? std::string("(no material file)") : quelle) +
                                  "  color " + (t.farbe.empty() ? "-" : Blatt(t.farbe)) +
                                  "  normal " + (t.normal.empty() ? "-" : Blatt(t.normal)) +
                                  "  spec " + (t.glanz.empty() ? "-" : Blatt(t.glanz)));

@@ -1,8 +1,8 @@
 # TFU2 Import for 3ds Max
 
-Import characters and animations from **Star Wars: The Force Unleashed II** (PC)
-straight from the game files into 3ds Max: skeleton, skinned meshes, materials with
-textures, and animations.
+Import characters and animations from **Star Wars: The Force Unleashed** and
+**Star Wars: The Force Unleashed II** (PC) straight from the game files into 3ds Max:
+skeleton, skinned meshes, materials with textures, and animations.
 
 > **Disclaimer:** unofficial, free fan project. It is **not** made by, affiliated with,
 > endorsed or sponsored by Lucasfilm Ltd., LucasArts, The Walt Disney Company, Aspyr
@@ -10,7 +10,7 @@ textures, and animations.
 > The Walt Disney Company; 3ds Max is a trademark of Autodesk. **No game data is
 > included** – the plugin reads the files of your own installation of the game.
 
-Version 0.2.1 – for **3ds Max 2016 to 2027** (Windows 10/11, 64-bit).
+Version 0.3.0 – for **3ds Max 2016 to 2027** (Windows 10/11, 64-bit).
 
 ## Install
 
@@ -26,19 +26,23 @@ The files are not code-signed yet, so Windows SmartScreen may warn ("Windows pro
 your PC" → *More info* → *Run anyway*). `SHA256SUMS.txt` on the release page lets you
 check the downloads.
 
-Requirements: *Star Wars: The Force Unleashed II* for PC installed (Steam version
-tested); the game folder is found automatically in your Steam libraries.
+Requirements: *Star Wars: The Force Unleashed* and/or *The Force Unleashed II* for PC
+installed (Steam versions tested); the game folders are found automatically in your
+Steam libraries.
 
 ## Use
 
-Menu **TFU2 Tool** with two windows (or *File → Import* and pick `pak0.lp` /
-`SWTFU2.exe` of the game):
+Menu **TFU2 Tool** with two windows (or *File → Import* and pick `SWTFU.exe` /
+`SWTFU2.exe` or one of the game's `LevelPacks\*.lp`):
 
-* **Import TFU2** – the character window. The game folder is found automatically
-  (Steam libraries) or picked with *Browse*. Tabs *Starkiller*, *Characters*,
+* **Import TFU2** – the character window. **TFU 1 / TFU 2** at the top switches
+  between the two games; each keeps its own game folder, found automatically (Steam
+  libraries) or picked with *Browse*. Tabs *Starkiller*, *Characters*,
   *Creatures + droids*, *Other*, *All*; *Static parts* also lists rigid pieces without
   a skeleton. Double-click or *Import*. Characters face the front view (−Y).
-* **TFU2 Animations** – pick the character in the scene, then a clip:
+* **TFU2 Animations** – pick the character in the scene, then a clip. The window
+  uses the game the character comes from, so TFU 1 and TFU 2 characters can share a
+  scene:
   * *Own clips* – what the game assigns to this character (its chore sets and its
     cut-scene clips), default
   * *Same rig* – clips made for its rig
@@ -53,15 +57,18 @@ Menu **TFU2 Tool** with two windows (or *File → Import* and pick `pak0.lp` /
   * *Face front* (default on) turns every clip so it starts at the origin facing the
     front view. In the game the root motion is relative to where the character
     looks; most clips start with the root turned ±90°.
-  * Clips of the other side of a finisher or saber lock (giant `_ga_`, Vader `_mb_` …)
-    are not offered as the character's own clips.
+  * Clips of the other side of a finisher or saber lock (giant `_ga_`, Vader `_mb_`,
+    the player `_ma_` on a rancor …) are not offered as the character's own clips.
 
 Files: `%LOCALAPPDATA%\TFU2Import\` holds the settings, `import.log` and the extracted
 textures (normal maps are converted from DXT5nm to regular RGB PNGs).
 
 ## Known limits
 
-* Capes and cloth are simulated in the game and are not part of the clips.
+* Capes and cloth are simulated in the game and are not part of the clips. Darth
+  Vader's cape is stored laid out flat (the start shape of the simulation), so it
+  sticks out once he moves.
+* Juno Eclipse has a single clip in *The Force Unleashed* – her cut-scenes are videos.
 * Lightsabers and weapons are not attached yet.
 * Facial morphs and cut-scene cameras are not imported.
 

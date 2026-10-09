@@ -29,9 +29,9 @@ public:
         default: return _T("");
         }
     }
-    const MCHAR* ShortDesc() override { return _T("Star Wars: The Force Unleashed II"); }
+    const MCHAR* ShortDesc() override { return _T("Star Wars: The Force Unleashed I + II"); }
     const MCHAR* LongDesc() override {
-        return _T("TFU2: game (pak0.lp / SWTFU2.exe -> character window) or a loose .gto model");
+        return _T("TFU / TFU2: game (a LevelPacks .lp / SWTFU.exe / SWTFU2.exe -> character window) or a loose .gto model");
     }
     const MCHAR* AuthorName() override { return _T("DennisH"); }
     const MCHAR* CopyrightMessage() override { return _T(""); }
@@ -40,7 +40,7 @@ public:
     unsigned int Version() override { return TFU2IMPORT_VERSION; }
     void ShowAbout(HWND hWnd) override {
         MessageBox(hWnd, _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T("\n\nCharacters and animations straight from\n")
-                         _T("Star Wars: The Force Unleashed II.\n\nNot affiliated with Lucasfilm, LucasArts, Disney or Autodesk."),
+                         _T("Star Wars: The Force Unleashed and The Force Unleashed II.\n\nNot affiliated with Lucasfilm, LucasArts, Disney or Autodesk."),
                    _T("TFU2 Import"), MB_ICONINFORMATION);
     }
     int DoImport(const MCHAR* name, ImpInterface*, Interface*, BOOL suppressPrompts) override {
@@ -96,7 +96,7 @@ public:
         const std::vector<uint32_t> sk = tfu2::CrcsInSzene(std::string(), &gto);
         const tfu::FigurEintrag* f = nullptr;
         for (const auto& e : k->figuren) if (tfu::Klein(e.gto) == tfu::Klein(gto)) { f = &e; break; }
-        if (f == nullptr || sk.empty()) { antwort = _T("ERROR: no TFU2 character in the scene"); return antwort.data(); }
+        if (f == nullptr || sk.empty()) { antwort = _T("ERROR: no TFU character in the scene"); return antwort.data(); }
         const auto& crcs = k->AnimCrcs(*p);
         std::vector<std::string> pfade;
         for (size_t i : k->EigeneAnimationen(*p, *f))
@@ -167,7 +167,7 @@ static TFU2ImportFP theTFU2ImportFP(
     p_end);
 
 __declspec(dllexport) const TCHAR* LibDescription() {
-    return _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T(" - Star Wars: The Force Unleashed II Importer");
+    return _T("TFU2 Import ") TFU2IMPORT_VERSION_STR _T(" - Star Wars: The Force Unleashed I + II Importer");
 }
 __declspec(dllexport) int LibNumberClasses() { return 1; }
 __declspec(dllexport) ClassDesc* LibClassDesc(int i) { return (i == 0) ? &theSceneImportClassDesc : nullptr; }
